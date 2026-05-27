@@ -80,7 +80,7 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
 
     // UI States
     var currentScreen by mutableStateOf(AppScreen.Dashboard)
-    var selectedProjectId by mutableStateOf<Int?>(1) // Default to first project
+    var selectedProjectId by mutableStateOf<Int?>(null) // Dynamic first project selector
     var attendanceDate by mutableStateOf("2026-05-26") // Date navigator
     var darkThemeEnabled by mutableStateOf(true) // Premium dark glassmorphism mode toggle
 
@@ -121,6 +121,15 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
     // Set selected project automatically if first project loads and selected is null
     init {
         viewModelScope.launch {
+            try {
+                val initialDbProjects = repository.allProjects.first()
+                if (initialDbProjects.isEmpty()) {
+                    repository.seedDatabase()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             projects.collectLatest { projectList ->
                 if (selectedProjectId == null && projectList.isNotEmpty()) {
                     selectedProjectId = projectList.first().id
