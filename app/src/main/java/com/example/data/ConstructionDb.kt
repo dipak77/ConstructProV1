@@ -2,6 +2,7 @@ package com.example.data
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
 import kotlinx.coroutines.flow.Flow
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
@@ -12,14 +13,22 @@ import kotlinx.coroutines.launch
 // 1. DATABASE ENTITIES
 // ==========================================
 
-@Entity(tableName = "projects")
+@Entity(
+    tableName = "projects",
+    indices = [
+        Index(value = ["status"]),
+        Index(value = ["name"])
+    ]
+)
 data class Project(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
     val location: String,
     val budget: Double,
     val status: String, // "Active", "Completed", "On Hold"
-    val customBackground: String? = null
+    val customBackground: String? = null,
+    val startDate: String = "",
+    val endDate: String = ""
 )
 
 @Entity(tableName = "workers")
@@ -41,7 +50,29 @@ data class Worker(
     val reference: String = "" // given reference field
 )
 
-@Entity(tableName = "attendance")
+@Entity(
+    tableName = "attendance",
+    foreignKeys = [
+        ForeignKey(
+            entity = Worker::class,
+            parentColumns = ["id"],
+            childColumns = ["workerId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = Project::class,
+            parentColumns = ["id"],
+            childColumns = ["projectId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["workerId", "date"], unique = true),
+        Index(value = ["projectId"]),
+        Index(value = ["date"]),
+        Index(value = ["status"])
+    ]
+)
 data class Attendance(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val workerId: Int,
@@ -51,7 +82,22 @@ data class Attendance(
     val overtimeHours: Double
 )
 
-@Entity(tableName = "tasks")
+@Entity(
+    tableName = "tasks",
+    foreignKeys = [
+        ForeignKey(
+            entity = Project::class,
+            parentColumns = ["id"],
+            childColumns = ["projectId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["projectId"]),
+        Index(value = ["status"]),
+        Index(value = ["priority"])
+    ]
+)
 data class Task(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val projectId: Int,
@@ -62,7 +108,30 @@ data class Task(
     val assignee: String
 )
 
-@Entity(tableName = "transactions")
+@Entity(
+    tableName = "transactions",
+    foreignKeys = [
+        ForeignKey(
+            entity = Project::class,
+            parentColumns = ["id"],
+            childColumns = ["projectId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = Worker::class,
+            parentColumns = ["id"],
+            childColumns = ["partyId"],
+            onDelete = ForeignKey.SET_NULL
+        )
+    ],
+    indices = [
+        Index(value = ["projectId"]),
+        Index(value = ["type"]),
+        Index(value = ["date"]),
+        Index(value = ["partyId"]),
+        Index(value = ["category"])
+    ]
+)
 data class Transaction(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val projectId: Int,
@@ -77,7 +146,18 @@ data class Transaction(
     val paymentMethod: String = "Cash" // "Cash", "Bank Transfer", "Cheque"
 )
 
-@Entity(tableName = "mom")
+@Entity(
+    tableName = "mom",
+    foreignKeys = [
+        ForeignKey(
+            entity = Project::class,
+            parentColumns = ["id"],
+            childColumns = ["projectId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["projectId"])]
+)
 data class MOM(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val projectId: Int,
@@ -86,7 +166,28 @@ data class MOM(
     val date: String // YYYY-MM-DD
 )
 
-@Entity(tableName = "payroll")
+@Entity(
+    tableName = "payroll",
+    foreignKeys = [
+        ForeignKey(
+            entity = Worker::class,
+            parentColumns = ["id"],
+            childColumns = ["workerId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = Project::class,
+            parentColumns = ["id"],
+            childColumns = ["projectId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["workerId"]),
+        Index(value = ["projectId"]),
+        Index(value = ["date"])
+    ]
+)
 data class Payroll(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val workerId: Int,
@@ -96,7 +197,31 @@ data class Payroll(
     val status: String // "Paid", "Pending"
 )
 
-@Entity(tableName = "estimates")
+@Entity(tableName = "leads")
+data class Lead(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val clientName: String,
+    val clientPhone: String,
+    val clientEmail: String,
+    val projectType: String,
+    val budget: Double,
+    val status: String, // "New", "Contacted", "Quoted", "Converted", "Lost"
+    val dateCreated: String,
+    val notes: String
+)
+
+@Entity(
+    tableName = "estimates",
+    foreignKeys = [
+        ForeignKey(
+            entity = Project::class,
+            parentColumns = ["id"],
+            childColumns = ["projectId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["projectId"])]
+)
 data class Estimate(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val projectId: Int,
@@ -225,6 +350,151 @@ interface ConstructionDao {
 
     @Delete
     suspend fun deleteEstimate(estimate: Estimate)
+
+    // Leads
+    @Query("SELECT * FROM leads ORDER BY id DESC")
+    fun getAllLeads(): Flow<List<Lead>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLead(lead: Lead): Long
+
+    @Update
+    suspend fun updateLead(lead: Lead)
+
+    @Delete
+    suspend fun deleteLead(lead: Lead)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllLeads(leads: List<Lead>)
+
+    @Query("DELETE FROM leads")
+    suspend fun clearLeads()
+
+    // ── Bulk Insert Methods (for 10K-record JSON imports) ──
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllProjects(projects: List<Project>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllWorkers(workers: List<Worker>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllAttendance(attendance: List<Attendance>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllTasks(tasks: List<Task>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllTransactions(transactions: List<Transaction>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllMOMs(moms: List<MOM>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllPayroll(payroll: List<Payroll>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllEstimates(estimates: List<Estimate>)
+
+    // ── Count queries for UI stats ──
+    @Query("SELECT COUNT(*) FROM transactions WHERE projectId = :projectId")
+    suspend fun getTransactionCount(projectId: Int): Int
+
+    @Query("SELECT COUNT(*) FROM workers")
+    suspend fun getWorkerCount(): Int
+
+    // ── Clear all tables (for full restore) ──
+    @Query("DELETE FROM projects")
+    suspend fun clearProjects()
+
+    @Query("DELETE FROM workers")
+    suspend fun clearWorkers()
+
+    @Query("DELETE FROM attendance")
+    suspend fun clearAttendance()
+
+    @Query("DELETE FROM tasks")
+    suspend fun clearTasks()
+
+    @Query("DELETE FROM transactions")
+    suspend fun clearTransactions()
+
+    @Query("DELETE FROM mom")
+    suspend fun clearMOMs()
+
+    @Query("DELETE FROM payroll")
+    suspend fun clearPayroll()
+
+    @Query("DELETE FROM estimates")
+    suspend fun clearEstimates()
+
+    @Query("UPDATE transactions SET partyId = NULL WHERE partyId = :workerId")
+    suspend fun clearTransactionPartyLinks(workerId: Int)
+
+    @Query("DELETE FROM payroll WHERE workerId = :workerId")
+    suspend fun deletePayrollForWorker(workerId: Int)
+
+    @Query("DELETE FROM attendance WHERE workerId = :workerId")
+    suspend fun deleteAttendanceForWorker(workerId: Int)
+
+    @Query("DELETE FROM tasks WHERE projectId = :projectId")
+    suspend fun deleteTasksForProject(projectId: Int)
+
+    @Query("DELETE FROM transactions WHERE projectId = :projectId")
+    suspend fun deleteTransactionsForProject(projectId: Int)
+
+    @Query("DELETE FROM attendance WHERE projectId = :projectId")
+    suspend fun deleteAttendanceForProject(projectId: Int)
+
+    @Query("DELETE FROM mom WHERE projectId = :projectId")
+    suspend fun deleteMOMsForProject(projectId: Int)
+
+    @Query("DELETE FROM payroll WHERE projectId = :projectId")
+    suspend fun deletePayrollForProject(projectId: Int)
+
+    @Query("DELETE FROM estimates WHERE projectId = :projectId")
+    suspend fun deleteEstimatesForProject(projectId: Int)
+
+    @androidx.room.Transaction
+    suspend fun replaceAllData(backupData: BackupData) {
+        clearLeads()
+        clearEstimates()
+        clearPayroll()
+        clearMOMs()
+        clearTransactions()
+        clearTasks()
+        clearAttendance()
+        clearWorkers()
+        clearProjects()
+
+        insertAllProjects(backupData.projects)
+        insertAllWorkers(backupData.workers)
+        insertAllTasks(backupData.tasks)
+        insertAllTransactions(backupData.transactions)
+        insertAllAttendance(backupData.attendance)
+        insertAllMOMs(backupData.moms)
+        insertAllPayroll(backupData.payroll)
+        insertAllEstimates(backupData.estimates)
+        insertAllLeads(backupData.leads)
+    }
+
+    @androidx.room.Transaction
+    suspend fun deleteProjectWithChildren(project: Project) {
+        deleteEstimatesForProject(project.id)
+        deletePayrollForProject(project.id)
+        deleteMOMsForProject(project.id)
+        deleteTransactionsForProject(project.id)
+        deleteTasksForProject(project.id)
+        deleteAttendanceForProject(project.id)
+        deleteProject(project)
+    }
+
+    @androidx.room.Transaction
+    suspend fun deleteWorkerWithChildren(worker: Worker) {
+        clearTransactionPartyLinks(worker.id)
+        deletePayrollForWorker(worker.id)
+        deleteAttendanceForWorker(worker.id)
+        deleteWorker(worker)
+    }
 }
 
 // ==========================================
@@ -240,10 +510,11 @@ interface ConstructionDao {
         Transaction::class,
         MOM::class,
         Payroll::class,
-        Estimate::class
+        Estimate::class,
+        Lead::class
     ],
-    version = 3,
-    exportSchema = false
+    version = 7,
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun constructionDao(): ConstructionDao
@@ -252,6 +523,57 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `attendance_new` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workerId` INTEGER NOT NULL, `projectId` INTEGER NOT NULL, `date` TEXT NOT NULL, `status` TEXT NOT NULL, `overtimeHours` REAL NOT NULL, FOREIGN KEY(`workerId`) REFERENCES `workers`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO `attendance_new` (`id`, `workerId`, `projectId`, `date`, `status`, `overtimeHours`) SELECT a.`id`, a.`workerId`, a.`projectId`, a.`date`, a.`status`, a.`overtimeHours` FROM `attendance` a WHERE EXISTS (SELECT 1 FROM `workers` w WHERE w.`id` = a.`workerId`) AND EXISTS (SELECT 1 FROM `projects` p WHERE p.`id` = a.`projectId`)")
+                db.execSQL("DROP TABLE `attendance`")
+                db.execSQL("ALTER TABLE `attendance_new` RENAME TO `attendance`")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_attendance_workerId_date` ON `attendance` (`workerId`, `date`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_attendance_projectId` ON `attendance` (`projectId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_attendance_date` ON `attendance` (`date`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_attendance_status` ON `attendance` (`status`)")
+
+                db.execSQL("CREATE TABLE IF NOT EXISTS `tasks_new` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `title` TEXT NOT NULL, `priority` TEXT NOT NULL, `status` TEXT NOT NULL, `dueDate` TEXT NOT NULL, `assignee` TEXT NOT NULL, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO `tasks_new` (`id`, `projectId`, `title`, `priority`, `status`, `dueDate`, `assignee`) SELECT t.`id`, t.`projectId`, t.`title`, t.`priority`, t.`status`, t.`dueDate`, t.`assignee` FROM `tasks` t WHERE EXISTS (SELECT 1 FROM `projects` p WHERE p.`id` = t.`projectId`)")
+                db.execSQL("DROP TABLE `tasks`")
+                db.execSQL("ALTER TABLE `tasks_new` RENAME TO `tasks`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_projectId` ON `tasks` (`projectId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_status` ON `tasks` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_priority` ON `tasks` (`priority`)")
+
+                db.execSQL("CREATE TABLE IF NOT EXISTS `transactions_new` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `type` TEXT NOT NULL, `amount` REAL NOT NULL, `category` TEXT NOT NULL, `description` TEXT NOT NULL, `date` TEXT NOT NULL, `partyId` INTEGER, `partyName` TEXT, `reference` TEXT NOT NULL, `paymentMethod` TEXT NOT NULL, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(`partyId`) REFERENCES `workers`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL)")
+                db.execSQL("INSERT INTO `transactions_new` (`id`, `projectId`, `type`, `amount`, `category`, `description`, `date`, `partyId`, `partyName`, `reference`, `paymentMethod`) SELECT t.`id`, t.`projectId`, t.`type`, t.`amount`, t.`category`, t.`description`, t.`date`, CASE WHEN t.`partyId` IS NULL OR EXISTS (SELECT 1 FROM `workers` w WHERE w.`id` = t.`partyId`) THEN t.`partyId` ELSE NULL END, t.`partyName`, t.`reference`, t.`paymentMethod` FROM `transactions` t WHERE EXISTS (SELECT 1 FROM `projects` p WHERE p.`id` = t.`projectId`)")
+                db.execSQL("DROP TABLE `transactions`")
+                db.execSQL("ALTER TABLE `transactions_new` RENAME TO `transactions`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_projectId` ON `transactions` (`projectId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_type` ON `transactions` (`type`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_date` ON `transactions` (`date`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_partyId` ON `transactions` (`partyId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_category` ON `transactions` (`category`)")
+
+                db.execSQL("CREATE TABLE IF NOT EXISTS `mom_new` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `date` TEXT NOT NULL, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO `mom_new` (`id`, `projectId`, `title`, `content`, `date`) SELECT m.`id`, m.`projectId`, m.`title`, m.`content`, m.`date` FROM `mom` m WHERE EXISTS (SELECT 1 FROM `projects` p WHERE p.`id` = m.`projectId`)")
+                db.execSQL("DROP TABLE `mom`")
+                db.execSQL("ALTER TABLE `mom_new` RENAME TO `mom`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_mom_projectId` ON `mom` (`projectId`)")
+
+                db.execSQL("CREATE TABLE IF NOT EXISTS `payroll_new` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workerId` INTEGER NOT NULL, `projectId` INTEGER NOT NULL, `date` TEXT NOT NULL, `wagesPaid` REAL NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY(`workerId`) REFERENCES `workers`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO `payroll_new` (`id`, `workerId`, `projectId`, `date`, `wagesPaid`, `status`) SELECT pr.`id`, pr.`workerId`, pr.`projectId`, pr.`date`, pr.`wagesPaid`, pr.`status` FROM `payroll` pr WHERE EXISTS (SELECT 1 FROM `workers` w WHERE w.`id` = pr.`workerId`) AND EXISTS (SELECT 1 FROM `projects` p WHERE p.`id` = pr.`projectId`)")
+                db.execSQL("DROP TABLE `payroll`")
+                db.execSQL("ALTER TABLE `payroll_new` RENAME TO `payroll`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_payroll_workerId` ON `payroll` (`workerId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_payroll_projectId` ON `payroll` (`projectId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_payroll_date` ON `payroll` (`date`)")
+
+                db.execSQL("CREATE TABLE IF NOT EXISTS `estimates_new` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `itemName` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit` TEXT NOT NULL, `rate` REAL NOT NULL, `totalCost` REAL NOT NULL, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO `estimates_new` (`id`, `projectId`, `itemName`, `quantity`, `unit`, `rate`, `totalCost`) SELECT e.`id`, e.`projectId`, e.`itemName`, e.`quantity`, e.`unit`, e.`rate`, e.`totalCost` FROM `estimates` e WHERE EXISTS (SELECT 1 FROM `projects` p WHERE p.`id` = e.`projectId`)")
+                db.execSQL("DROP TABLE `estimates`")
+                db.execSQL("ALTER TABLE `estimates_new` RENAME TO `estimates`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_estimates_projectId` ON `estimates` (`projectId`)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -259,6 +581,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "construction_database"
                 )
+                .addMigrations(MIGRATION_4_5)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
@@ -267,53 +590,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         suspend fun seedDatabase(dao: ConstructionDao) {
-            // Seed Projects
-            val p1Id = dao.insertProject(Project(name = "Skyline Corporate Tower", location = "Sector 62, City Center", budget = 1250000.0, status = "Active", customBackground = "preset_cyber_blueprint")).toInt()
-            val p2Id = dao.insertProject(Project(name = "Emerald Heights Villa", location = "Hilltop Greens", budget = 450000.0, status = "Active", customBackground = "preset_sunset_construct")).toInt()
-            dao.insertProject(Project(name = "Metro Line Transit", location = "Subway Segment 4", budget = 3200000.0, status = "On Hold", customBackground = "preset_golden_truss"))
-
-            // Seed Workers (Colors packed as ABGR Ints representing beautiful neon shades)
-            val w1Id = dao.insertWorker(Worker(name = "John Carter", role = "Mason Foreman", shift = "Day", wageRate = 350.0, avatarColor = 0xFF3B82F6.toInt())).toInt()
-            val w2Id = dao.insertWorker(Worker(name = "Alice Rivera", role = "Senior Electrician", shift = "Day", wageRate = 420.0, avatarColor = 0xFFEC4899.toInt())).toInt()
-            val w3Id = dao.insertWorker(Worker(name = "Michael Tyson", role = "Site Supervisor", shift = "Day", wageRate = 500.0, avatarColor = 0xFF10B981.toInt())).toInt()
-            val w4Id = dao.insertWorker(Worker(name = "David Kovacs", role = "Plumbing Expert", shift = "Night", wageRate = 380.0, avatarColor = 0xFFF59E0B.toInt())).toInt()
-            val w5Id = dao.insertWorker(Worker(name = "Sarah Connor", role = "Safety Officer", shift = "Day", wageRate = 400.0, avatarColor = 0xFF8B5CF6.toInt())).toInt()
-
-            // Seed Attendance for today YYYY-MM-DD
-            val today = "2026-05-26"
-            dao.insertAttendance(Attendance(workerId = w1Id, projectId = p1Id, date = today, status = "Present", overtimeHours = 0.0))
-            dao.insertAttendance(Attendance(workerId = w2Id, projectId = p1Id, date = today, status = "Present", overtimeHours = 2.0))
-            dao.insertAttendance(Attendance(workerId = w3Id, projectId = p1Id, date = today, status = "Present", overtimeHours = 0.0))
-            dao.insertAttendance(Attendance(workerId = w4Id, projectId = p1Id, date = today, status = "Absent", overtimeHours = 0.0))
-            dao.insertAttendance(Attendance(workerId = w5Id, projectId = p2Id, date = today, status = "Present", overtimeHours = 1.5))
-
-            // Seed Tasks
-            dao.insertTask(Task(projectId = p1Id, title = "Pour foundation concrete slab", priority = "High", status = "Done", dueDate = "2026-05-24", assignee = "John Carter"))
-            dao.insertTask(Task(projectId = p1Id, title = "Conduct structural welding inspection", priority = "High", status = "In Progress", dueDate = "2026-05-28", assignee = "Michael Tyson"))
-            dao.insertTask(Task(projectId = p1Id, title = "Finalize electrical conduit piping", priority = "Medium", status = "To Do", dueDate = "2026-05-30", assignee = "Alice Rivera"))
-            dao.insertTask(Task(projectId = p2Id, title = "Install master bedroom plumbing lines", priority = "Medium", status = "In Progress", dueDate = "2026-05-27", assignee = "David Kovacs"))
-            dao.insertTask(Task(projectId = p2Id, title = "Review exterior facade safety rigging", priority = "Low", status = "To Do", dueDate = "2026-06-02", assignee = "Sarah Connor"))
-
-            // Seed Transactions
-            dao.insertTransaction(Transaction(projectId = p1Id, type = "Money In", amount = 850000.0, category = "Client Advance", description = "Initial milestone payment received", date = "2026-05-15"))
-            dao.insertTransaction(Transaction(projectId = p1Id, type = "Money Out", amount = 120000.0, category = "Material", description = "Super Grade Portland Cement (400 Bags)", date = "2026-05-18"))
-            dao.insertTransaction(Transaction(projectId = p1Id, type = "Money Out", amount = 45000.0, category = "Labor", description = "Worker weekly salary payout", date = "2026-05-22"))
-            dao.insertTransaction(Transaction(projectId = p2Id, type = "Money In", amount = 300000.0, category = "Client Advance", description = "Phase-1 booking advance received", date = "2026-05-10"))
-            dao.insertTransaction(Transaction(projectId = p2Id, type = "Money Out", amount = 35000.0, category = "Equipment", description = "Excavator rental for foundation dig", date = "2026-05-12"))
-
-            // Seed MOMs
-            dao.insertMOM(MOM(projectId = p1Id, title = "Slab Casting Briefing", content = "Checked cement inventory. Approved slump test protocol. Discussed rain precautions and worker scheduling.", date = "2026-05-23"))
-            dao.insertMOM(MOM(projectId = p1Id, title = "Weekly Architecture Alignment", content = "Aligned on layout modifications for the HVAC shaft on 3rd floor. Verified load bearing calculations.", date = "2026-05-20"))
-
-            // Seed Payroll
-            dao.insertPayroll(Payroll(workerId = w1Id, projectId = p1Id, date = "2026-05-25", wagesPaid = 2450.0, status = "Paid"))
-            dao.insertPayroll(Payroll(workerId = w2Id, projectId = p1Id, date = "2026-05-25", wagesPaid = 2940.0, status = "Paid"))
-            dao.insertPayroll(Payroll(workerId = w3Id, projectId = p1Id, date = "2026-05-25", wagesPaid = 3500.0, status = "Pending"))
-
-            // Seed Estimates
-            dao.insertEstimate(Estimate(projectId = p1Id, itemName = "Grade 500 TMT Steel Bars", quantity = 15.0, unit = "Tons", rate = 850.0, totalCost = 12750.0))
-            dao.insertEstimate(Estimate(projectId = p1Id, itemName = "ReadyMix Concrete M25 Grade", quantity = 120.0, unit = "CuM", rate = 95.0, totalCost = 11400.0))
-            dao.insertEstimate(Estimate(projectId = p2Id, itemName = "Bricks Red Fine Burned", quantity = 25000.0, unit = "Pcs", rate = 0.15, totalCost = 3750.0))
+            // Seeding disabled for production ready clean database
         }
     }
 }
@@ -331,18 +608,19 @@ class ConstructionRepository(private val dao: ConstructionDao) {
     val allMOMs: Flow<List<MOM>> = dao.getAllMOMs()
     val allPayroll: Flow<List<Payroll>> = dao.getAllPayroll()
     val allEstimates: Flow<List<Estimate>> = dao.getAllEstimates()
+    val allLeads: Flow<List<Lead>> = dao.getAllLeads()
 
     suspend fun seedDatabase() {
         AppDatabase.seedDatabase(dao)
     }
 
     suspend fun insertProject(project: Project) = dao.insertProject(project)
-    suspend fun deleteProject(project: Project) = dao.deleteProject(project)
+    suspend fun deleteProject(project: Project) = dao.deleteProjectWithChildren(project)
     suspend fun deleteProjectById(projectId: Int) = dao.deleteProjectById(projectId)
     suspend fun updateProject(project: Project) = dao.updateProject(project)
 
     suspend fun insertWorker(worker: Worker) = dao.insertWorker(worker)
-    suspend fun deleteWorker(worker: Worker) = dao.deleteWorker(worker)
+    suspend fun deleteWorker(worker: Worker) = dao.deleteWorkerWithChildren(worker)
     suspend fun updateWorker(worker: Worker) = dao.updateWorker(worker)
 
     suspend fun insertAttendance(attendance: Attendance) = dao.insertAttendance(attendance)
@@ -368,4 +646,8 @@ class ConstructionRepository(private val dao: ConstructionDao) {
     suspend fun insertEstimate(estimate: Estimate) = dao.insertEstimate(estimate)
     suspend fun updateEstimate(estimate: Estimate) = dao.updateEstimate(estimate)
     suspend fun deleteEstimate(estimate: Estimate) = dao.deleteEstimate(estimate)
+
+    suspend fun insertLead(lead: Lead) = dao.insertLead(lead)
+    suspend fun updateLead(lead: Lead) = dao.updateLead(lead)
+    suspend fun deleteLead(lead: Lead) = dao.deleteLead(lead)
 }

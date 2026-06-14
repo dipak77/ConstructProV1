@@ -61,7 +61,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
     val googleSignInClient = remember {
         try {
             GoogleSignIn.getClient(context, gso)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             null
         }
     }
@@ -98,7 +98,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
         }
     }
 
-    GlassAtmosphereBox(darkTheme = dark) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -176,26 +176,71 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                         letterSpacing = 1.sp
                     )
 
+                    // Always visible prominent Workspace Demo Entry Button
+                    GlassButton(
+                        onClick = {
+                            val user = GoogleUser(
+                                displayName = "ConstructPro Demo",
+                                email = "demo.contractor@constructpro.net",
+                                photoUrl = null,
+                                isGuest = true
+                            )
+                            viewModel.handleGoogleSignIn(user, context)
+                            Toast.makeText(context, "Welcome to ConstructPro Demo Sandbox!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        glowColor = if (dark) NeonGreen else Color(0xFF10B981),
+                        darkTheme = dark
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = if (dark) Color.Black else Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Workspace Demo Entry",
+                                color = if (dark) Color.Black else Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+
                     if (isConnecting) {
                         Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            CircularProgressIndicator(
-                                color = NeonPurple,
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(40.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "Connecting to Google Services...",
-                                color = if (dark) TextSecondary else TextSecondaryLight,
-                                fontSize = 12.sp
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = NeonPurple,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Connecting to Google Services...",
+                                    color = if (dark) TextSecondary else TextSecondaryLight,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            TextButton(onClick = { isConnecting = false }) {
+                                Text("Cancel", color = NeonCyan, fontSize = 12.sp)
+                            }
                         }
                     } else {
                         // Google Sign-In button
-                        Button(
+                        GlassButton(
                             onClick = {
                                 isConnecting = true
                                 val client = googleSignInClient
@@ -203,13 +248,13 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                                     try {
                                         val intent = client.signInIntent
                                         signInLauncher.launch(intent)
-                                    } catch (e: Exception) {
+                                    } catch (e: Throwable) {
                                         try {
                                             // Graceful fallback attempt with signout first
                                             client.signOut()
                                             val intent = client.signInIntent
                                             signInLauncher.launch(intent)
-                                        } catch (ex: Exception) {
+                                        } catch (ex: Throwable) {
                                             isConnecting = false
                                             showAccountChooser = true
                                             Toast.makeText(context, "No local Play services: opening account list", Toast.LENGTH_SHORT).show()
@@ -224,11 +269,9 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (dark) Color(0xFFFFFFFF) else Color(0xFF1F2937)
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                            outlineMode = true,
+                            glowColor = if (dark) Color.White.copy(alpha = 0.3f) else Color.LightGray,
+                            darkTheme = dark
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -256,36 +299,36 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                                 
                                 Text(
                                     text = "Sign in with Google",
-                                    color = if (dark) Color.Black else Color.White,
+                                    color = if (dark) Color.White else Color.Black,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                             }
                         }
+                    }
 
-                        // Alternative demo/offline quick entry option
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showAccountChooser = true }
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Security,
-                                contentDescription = null,
-                                tint = if (dark) NeonGreen else Color(0xFF059669),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Having trouble? Select demo account",
-                                color = if (dark) NeonGreen else Color(0xFF059669),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                    // Alternative demo/offline quick entry option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showAccountChooser = true }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = null,
+                            tint = if (dark) NeonCyan else Color(0xFF0284C7),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Trouble signing in? Custom Options",
+                            color = if (dark) NeonCyan else Color(0xFF0284C7),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -299,8 +342,8 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
             modifier = Modifier
                 .fillMaxWidth(0.9f)
-                .widthIn(max = 440.dp)
-                .clip(RoundedCornerShape(24.dp)),
+                .widthIn(max = 440.dp),
+            shape = RoundedCornerShape(24.dp),
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showAccountChooser = false }) {
@@ -569,7 +612,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                                     textStyle = TextStyle(fontSize = 12.sp)
                                 )
 
-                                Button(
+                                GlassButton(
                                     onClick = {
                                         if (customName.isNotBlank() && customEmail.isNotBlank()) {
                                             val user = GoogleUser(
@@ -584,11 +627,11 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                                             Toast.makeText(context, "Please fill in all simulation credentials", Toast.LENGTH_SHORT).show()
                                         }
                                     },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                                    shape = RoundedCornerShape(10.dp)
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    glowColor = NeonCyan,
+                                    darkTheme = dark
                                 ) {
-                                    Text("AUTHENTICATE CUSTOM IDENTITY", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                    Text("AUTHENTICATE CUSTOM IDENTITY", color = if (dark) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                                 }
                             }
                         }

@@ -29,8 +29,20 @@ class ExampleRobolectricTest {
     val db = AppDatabase.getDatabase(context)
     val dao = db.constructionDao()
 
-    // Manually trigger seed database to verify queries and schema constraints
-    AppDatabase.seedDatabase(dao)
+    // Insert dummy test entities manually to verify queries and schema constraints
+    dao.insertProject(com.example.data.Project(
+        name = "Skyline Corporate Tower",
+        location = "DownTown Alpha",
+        budget = 5000000.0,
+        status = "Active"
+    ))
+    dao.insertWorker(com.example.data.Worker(
+        name = "John Carter",
+        role = "Site Supervisor",
+        shift = "Day",
+        wageRate = 800.0,
+        avatarColor = 0xFF00FF00.toInt()
+    ))
 
     val projects = dao.getAllProjects().first()
     assertTrue(projects.isNotEmpty())
