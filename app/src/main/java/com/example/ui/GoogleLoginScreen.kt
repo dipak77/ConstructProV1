@@ -44,17 +44,11 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
     
     // UI controller states
     var isConnecting by remember { mutableStateOf(false) }
-    var showAccountChooser by remember { mutableStateOf(false) }
-    
-    // Custom email login mode toggle
-    var showCustomInput by remember { mutableStateOf(false) }
-    var customName by remember { mutableStateOf("") }
-    var customEmail by remember { mutableStateOf("") }
 
     // Authentic GMS Google Sign In options config
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(com.example.BuildConfig.GOOGLE_OAUTH_CLIENT_ID)
+            .requestIdToken("970298420983-bin5cqqcqgdoi9r256p7a78bvpi6c0hs.apps.googleusercontent.com")
             .requestEmail()
             .requestProfile()
             .build()
@@ -78,7 +72,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                 val account: GoogleSignInAccount? = task.getResult(ApiException::class.java)
                 if (account != null) {
                     val user = GoogleUser(
-                        displayName = account.displayName ?: "Google Builder",
+                        displayName = account.displayName ?: "Google User",
                         email = account.email ?: "developer@gmail.com",
                         photoUrl = account.photoUrl?.toString(),
                         idToken = account.idToken,
@@ -86,16 +80,15 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                     )
                     viewModel.handleGoogleSignIn(user, context)
                     Toast.makeText(context, "Welcome, ${user.displayName}!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Failed to retrieve Google Account details.", Toast.LENGTH_LONG).show()
                 }
             } catch (e: ApiException) {
-                // If GMS framework throws exception (common on emulate layers lacking Play Services Account integrations),
-                // we gracefully fall back to custom selection to keep it fully operational!
-                showAccountChooser = true
-                Toast.makeText(context, "GMS Session: Initializing fallback chooser", Toast.LENGTH_SHORT).show()
+                val errorMsg = "Google Sign In Failed. Code: ${e.statusCode}. Please verify device accounts/fingerprint."
+                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
             }
         } else {
-            // Failed/Cancelled - fallback to custom chooser
-            showAccountChooser = true
+            Toast.makeText(context, "Sign In Canceled (Code: ${result.resultCode})", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -165,7 +158,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                 glowColor = NeonPurple
             ) {
                 Column(
-                    modifier = Modifier.padding(8.dp),
+                    modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -202,14 +195,28 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                             }
                         }
                     } else {
-                        // Google Sign-In button
+                        // Google Sign-In button (Real authentication flow Only)
                         GlassButton(
                             onClick = {
-                                if (googleSignInClient != null) {
-                                    isConnecting = true
-                                    signInLauncher.launch(googleSignInClient.signInIntent)
+                                isConnecting = true
+                                val client = googleSignInClient
+                                if (client != null) {
+                                    try {
+                                        val intent = client.signInIntent
+                                        signInLauncher.launch(intent)
+                                    } catch (e: Throwable) {
+                                        try {
+                                            client.signOut()
+                                            val intent = client.signInIntent
+                                            signInLauncher.launch(intent)
+                                        } catch (ex: Throwable) {
+                                            isConnecting = false
+                                            Toast.makeText(context, "Google Sign-In launch failed: ${ex.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
                                 } else {
-                                    Toast.makeText(context, "Google Play Services not available", Toast.LENGTH_SHORT).show()
+                                    isConnecting = false
+                                    Toast.makeText(context, "Google Play Services unavailable on this device", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier
@@ -252,231 +259,8 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                             }
                         }
                     }
-
-                    // Alternative demo/offline quick entry option
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showAccountChooser = true }
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = null,
-                            tint = if (dark) NeonCyan else Color(0xFF0284C7),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Trouble signing in? Custom Options",
-                            color = if (dark) NeonCyan else Color(0xFF0284C7),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
             }
         }
-    }
-
-    // Google Account Selector Fallback & Custom Entry Sheet Dialog
-    if (showAccountChooser) {
-        AlertDialog(
-            onDismissRequest = { showAccountChooser = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .widthIn(max = 440.dp),
-            shape = RoundedCornerShape(24.dp),
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showAccountChooser = false }) {
-                    Text("Close", color = Color.Gray)
-                }
-            },
-            title = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Google Sign-In Accounts",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (dark) Color.White else Color.Black
-                    )
-                    Text(
-                        text = "Choose an account to continue to ConstructPro",
-                        fontSize = 11.sp,
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            },
-            containerColor = if (dark) Color(0xFF0F172A) else Color.White,
-            text = {
-                val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Help Guide Card
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (dark) Color(0xFF1E293B) else Color(0xFFEFF6FF)
-                            ),
-                            border = BorderStroke(1.5.dp, if (dark) Color(0xFFF59E0B) else Color(0xFF3B82F6)),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 6.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = "🔒 Google Identity & API Guide",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    color = if (dark) Color(0xFFFCD34D) else Color(0xFF1D4ED8)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "To sign in with real accounts on physical devices, register this app's credentials in your Google Cloud / Firebase console under APIs & Services:",
-                                    fontSize = 10.sp,
-                                    color = if (dark) Color(0xFFCBD5E1) else Color(0xFF334155),
-                                    lineHeight = 14.sp
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                // Package Name
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column {
-                                        Text("Package Name:", fontSize = 8.sp, color = Color.Gray)
-                                        Text("com.aistudio.constructpro.kgrmqd", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (dark) Color.White else Color.Black)
-                                    }
-                                    TextButton(onClick = {
-                                        clipboard.setText(androidx.compose.ui.text.AnnotatedString("com.aistudio.constructpro.kgrmqd"))
-                                        Toast.makeText(context, "Copied Package Name!", Toast.LENGTH_SHORT).show()
-                                    }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
-                                        Text("Copy", fontSize = 10.sp, color = NeonCyan)
-                                    }
-                                }
-                                
-                                // SHA-1 Fingerprint
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("Debug SHA-1:", fontSize = 8.sp, color = Color.Gray)
-                                        Text("16:32:70:61:0E:4D:E9:9B:C8:3D:22:C3:8E:38:45:D3:10:37:15:49", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = if (dark) Color.White else Color.Black)
-                                    }
-                                    TextButton(onClick = {
-                                        clipboard.setText(androidx.compose.ui.text.AnnotatedString("16:32:70:61:0E:4D:E9:9B:C8:3D:22:C3:8E:38:45:D3:10:37:15:49"))
-                                        Toast.makeText(context, "Copied SHA-1 Certificate!", Toast.LENGTH_SHORT).show()
-                                    }) {
-                                        Text("Copy", fontSize = 10.sp, color = NeonCyan)
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "💡 Tip: Bypass GMS remote signature errors instantly by typing a custom simulation email below!",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (dark) NeonGreen else Color(0xFF047857),
-                                    lineHeight = 13.sp
-                                )
-                            }
-                        }
-                    }
-                    
-
-
-                    // Toggle custom simulation input row
-                    item {
-                        OutlinedButton(
-                            onClick = { showCustomInput = !showCustomInput },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, if (dark) NeonCyan.copy(alpha = 0.5f) else Color.LightGray)
-                        ) {
-                            Icon(imageVector = Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (showCustomInput) "Hide simulation options" else "Select custom google identity...", fontSize = 11.sp, color = if (dark) NeonCyan else Color.Black)
-                        }
-                    }
-
-                    if (showCustomInput) {
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Full Name text field
-                                OutlinedTextField(
-                                    value = customName,
-                                    onValueChange = { customName = it },
-                                    label = { Text("Display Name", fontSize = 12.sp) },
-                                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = NeonCyan,
-                                        focusedLabelColor = NeonCyan,
-                                        unfocusedTextColor = if (dark) Color.White else Color.Black,
-                                        focusedTextColor = if (dark) Color.White else Color.Black
-                                    ),
-                                    textStyle = TextStyle(fontSize = 12.sp)
-                                )
-
-                                // Email text field
-                                OutlinedTextField(
-                                    value = customEmail,
-                                    onValueChange = { customEmail = it },
-                                    label = { Text("Google Account Email", fontSize = 12.sp) },
-                                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = NeonCyan,
-                                        focusedLabelColor = NeonCyan,
-                                        unfocusedTextColor = if (dark) Color.White else Color.Black,
-                                        focusedTextColor = if (dark) Color.White else Color.Black
-                                    ),
-                                    textStyle = TextStyle(fontSize = 12.sp)
-                                )
-
-                                GlassButton(
-                                    onClick = {
-                                        if (customName.isNotBlank() && customEmail.isNotBlank()) {
-                                            val user = GoogleUser(
-                                                displayName = customName.trim(),
-                                                email = customEmail.trim(),
-                                                photoUrl = null,
-                                                isGuest = false
-                                            )
-                                            viewModel.handleGoogleSignIn(user, context)
-                                            showAccountChooser = false
-                                        } else {
-                                            Toast.makeText(context, "Please fill in all simulation credentials", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                                    glowColor = NeonCyan,
-                                    darkTheme = dark
-                                ) {
-                                    Text("AUTHENTICATE CUSTOM IDENTITY", color = if (dark) Color.Black else Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        )
     }
 }

@@ -336,7 +336,7 @@ fun MoreScreen(
                             try {
                                 val gso = GoogleSignInOptions
                                     .Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                    .requestIdToken(com.example.BuildConfig.GOOGLE_OAUTH_CLIENT_ID)
+                                    .requestIdToken("970298420983-bin5cqqcqgdoi9r256p7a78bvpi6c0hs.apps.googleusercontent.com")
                                     .requestEmail().build()
                                 GoogleSignIn.getClient(context, gso).signOut()
                             } catch (t: Throwable) { t.printStackTrace() }
@@ -1699,7 +1699,7 @@ private fun PremiumThemeBackupCard(
 
         val googleSignInClient = remember {
             val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(com.example.BuildConfig.GOOGLE_OAUTH_CLIENT_ID)
+                .requestIdToken("970298420983-bin5cqqcqgdoi9r256p7a78bvpi6c0hs.apps.googleusercontent.com")
                 .requestEmail()
                 .requestProfile()
                 .requestScopes(com.google.android.gms.common.api.Scope("https://www.googleapis.com/auth/drive.file"))
