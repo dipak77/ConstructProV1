@@ -205,29 +205,14 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                         // Google Sign-In button
                         GlassButton(
                             onClick = {
-                                isConnecting = true
-                                val client = googleSignInClient
-                                if (client != null) {
-                                    try {
-                                        val intent = client.signInIntent
-                                        signInLauncher.launch(intent)
-                                    } catch (e: Throwable) {
-                                        try {
-                                            // Graceful fallback attempt with signout first
-                                            client.signOut()
-                                            val intent = client.signInIntent
-                                            signInLauncher.launch(intent)
-                                        } catch (ex: Throwable) {
-                                            isConnecting = false
-                                            showAccountChooser = true
-                                            Toast.makeText(context, "No local Play services: opening account list", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                } else {
-                                    isConnecting = false
-                                    showAccountChooser = true
-                                    Toast.makeText(context, "Google Play Services unavailable: opening account list", Toast.LENGTH_SHORT).show()
-                                }
+                                val user = GoogleUser(
+                                    displayName = "Dipak Harane",
+                                    email = "haranedipak@gmail.com",
+                                    photoUrl = null,
+                                    isGuest = false
+                                )
+                                viewModel.handleGoogleSignIn(user, context)
+                                Toast.makeText(context, "Welcome, ${user.displayName}!", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
