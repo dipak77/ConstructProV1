@@ -54,7 +54,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
     // Authentic GMS Google Sign In options config
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken("970298420983-bin5cqqcqgdoi9r256p7a78bvpi6c0hs.apps.googleusercontent.com")
+            .requestIdToken(com.example.BuildConfig.GOOGLE_OAUTH_CLIENT_ID)
             .requestEmail()
             .requestProfile()
             .build()
@@ -205,14 +205,12 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                         // Google Sign-In button
                         GlassButton(
                             onClick = {
-                                val user = GoogleUser(
-                                    displayName = "Dipak Harane",
-                                    email = "haranedipak@gmail.com",
-                                    photoUrl = null,
-                                    isGuest = false
-                                )
-                                viewModel.handleGoogleSignIn(user, context)
-                                Toast.makeText(context, "Welcome, ${user.displayName}!", Toast.LENGTH_SHORT).show()
+                                if (googleSignInClient != null) {
+                                    isConnecting = true
+                                    signInLauncher.launch(googleSignInClient.signInIntent)
+                                } else {
+                                    Toast.makeText(context, "Google Play Services not available", Toast.LENGTH_SHORT).show()
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -387,7 +385,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
 
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "💡 Tip: Bypass GMS remote signature errors instantly by tapping \"Dipak Harane\" or typing custom email below!",
+                                    text = "💡 Tip: Bypass GMS remote signature errors instantly by typing a custom simulation email below!",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (dark) NeonGreen else Color(0xFF047857),
@@ -397,63 +395,7 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                         }
                     }
                     
-                    // Account Option 1: The current developer user (Dipak Harane)
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val user = GoogleUser(
-                                        displayName = "Dipak Harane",
-                                        email = "haranedipak@gmail.com",
-                                        photoUrl = null,
-                                        isGuest = false
-                                    )
-                                    viewModel.handleGoogleSignIn(user, context)
-                                    showAccountChooser = false
-                                    Toast.makeText(context, "SignedIn successfully as Dipak", Toast.LENGTH_SHORT).show()
-                                },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (dark) Color(0x3B1F2937) else Color(0xFFF3F4F6)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Avatar circle showing "D"
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .background(Color(0xFF8B5CF6), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("DH", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Dipak Harane",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = if (dark) Color.White else Color.Black
-                                    )
-                                    Text(
-                                        text = "haranedipak@gmail.com",
-                                        fontSize = 11.sp,
-                                        color = Color.Gray
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Standard",
-                                    tint = NeonCyan,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
+
 
                     // Toggle custom simulation input row
                     item {
