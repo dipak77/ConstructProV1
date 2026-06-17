@@ -5,6 +5,7 @@ import android.util.Base64
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,13 +30,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -46,9 +46,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.security.SecureRandom
+import kotlin.math.cos
+import kotlin.math.sin
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  SECURITY LAYER  (SHA-256 + salt, legacy migration)
@@ -114,111 +115,159 @@ private fun verifyPin(pin: String, c: PinCredential): Boolean {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  DESIGN TOKENS
+//  DESIGN TOKENS & COLOR PALETTE
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 private object PinTokens {
-    val accentViolet  = Color(0xFF7C3AED)
-    val accentBlue    = Color(0xFF00D4FF)
-    val accentGreen   = Color(0xFF00E68A)
-    val errorRed      = Color(0xFFFF5C5C)
-    val keySize       = 76.dp
-    val keySpacing    = 18.dp
-    val dotSizeFilled = 16.dp
-    val dotSizeEmpty  = 12.dp
+    val keySize       = 64.dp
+    val keySpacing    = 12.dp
     val pinLength     = 4
 }
 
-private data class PinColors(
-    val bgGrad: Brush,
-    val cardBg: Color,
-    val text: Color,
-    val subText: Color,
-    val border: Color,
-    val keyTopHighlight: Color,
-    val keyBg: Brush,
-    val orbAlpha: Float,
-    val vignetteAlpha: Float,
-)
-
-private fun pinColors(dark: Boolean): PinColors {
-    return if (dark) PinColors(
-        bgGrad = Brush.verticalGradient(listOf(Color(0xFF020611), Color(0xFF0A1628), Color(0xFF060E1F))),
-        cardBg = Color(0xFF0C1322),
-        text = Color(0xFFF1F5F9),
-        subText = Color(0xFF64748B),
-        border = Color(0xFF1E293B),
-        keyTopHighlight = Color.White.copy(alpha = 0.07f),
-        keyBg = Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = 0.07f), Color.White.copy(alpha = 0.02f))
-        ),
-        orbAlpha = 1f,
-        vignetteAlpha = 0.55f,
-    ) else PinColors(
-        bgGrad = Brush.verticalGradient(listOf(Color(0xFFF0F4FF), Color(0xFFE8EEFB), Color(0xFFF8FAFF))),
-        cardBg = Color.White,
-        text = Color(0xFF0F172A),
-        subText = Color(0xFF64748B),
-        border = Color(0xFFE2E8F0),
-        keyTopHighlight = Color.White.copy(alpha = 0.9f),
-        keyBg = Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = 0.95f), Color(0xFFF1F5F9).copy(alpha = 0.8f))
-        ),
-        orbAlpha = 0.45f,
-        vignetteAlpha = 0.08f,
-    )
+private object PremiumPinColors {
+    val bgroundBase     = Color(0xFF020817) // Layer 0 - Deep void base
+    val bgroundBaseSec  = Color(0xFF0B1224) // Layer 1 - Deep blue galaxy hub
+    val neonCyan        = Color(0xFF00D4FF) // Primary neon sky action
+    val neonPurple      = Color(0xFFA78BFA) // Aesthetic secondary violet
+    val neonGreen       = Color(0xFF00FF87) // Success active green
+    val neonPink        = Color(0xFFFF4D7D) // Error warning danger pink
+    val textPrimary     = Color(0xFFF8FAFC) // Ice white headers
+    val textSecondary   = Color(0xFF94A3B8) // Slate secondary
 }
 
+// Keyboards letter pairings
+private val KeyLetters = mapOf(
+    "1" to "", "2" to "ABC", "3" to "DEF",
+    "4" to "GHI", "5" to "JKL", "6" to "MNO",
+    "7" to "PQRS", "8" to "TUV", "9" to "WXYZ", "0" to "+"
+)
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  ANIMATED ORB BACKGROUND
+//  ANIMATED SPACE BLUEPRINT BACKGROUND
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @Composable
-private fun AnimatedOrbBackground(colors: PinColors) {
-    val t = rememberInfiniteTransition(label = "orbs")
-    
-    @Composable
-    fun orbit(base: Float, amp: Float, dur: Int) = t.animateFloat(
-        initialValue = base - amp, targetValue = base + amp,
-        animationSpec = infiniteRepeatable(tween(dur, easing = LinearEasing), RepeatMode.Reverse),
-        label = "orb"
+private fun AnimatedSpaceBlueprintBackground(
+    pinLength: Int,
+    isError: Boolean,
+    isSuccess: Boolean
+) {
+    val scaleBreath = 1.0f
+    val gridOffset = 30f
+
+    // Vibrant interactive backing color shifting dynamically with user interaction state
+    val glowColorTarget = when {
+        isSuccess -> PremiumPinColors.neonGreen.copy(alpha = 0.16f)
+        isError -> PremiumPinColors.neonPink.copy(alpha = 0.18f)
+        pinLength > 0 -> PremiumPinColors.neonCyan.copy(alpha = 0.08f + (pinLength * 0.02f))
+        else -> PremiumPinColors.neonPurple.copy(alpha = 0.06f)
+    }
+    val ambientGlowColor by animateColorAsState(
+        targetValue = glowColorTarget,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "bg_pulse_glow"
     )
-    
-    val o1x by orbit(0.25f, 0.12f, 9000); val o1y by orbit(0.20f, 0.10f, 11000)
-    val o2x by orbit(0.72f, 0.10f, 13000); val o2y by orbit(0.65f, 0.12f, 10000)
-    val o3x by orbit(0.50f, 0.15f, 15000); val o3y by orbit(0.82f, 0.08f, 12000)
-    val a = colors.orbAlpha
 
     Box(Modifier.fillMaxSize()) {
-        listOf(
-            Triple(o1x to o1y, PinTokens.accentViolet.copy(alpha = 0.10f * a), 380.dp),
-            Triple(o2x to o2y, PinTokens.accentBlue.copy(alpha = 0.08f * a), 320.dp),
-            Triple(o3x to o3y, PinTokens.accentGreen.copy(alpha = 0.05f * a), 280.dp),
-        ).forEach { (pos, color, sizeDp) ->
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .drawBehind {
-                        val cx = size.width * pos.first
-                        val cy = size.height * pos.second
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                listOf(color, Color.Transparent),
-                                center = Offset(cx, cy),
-                                radius = sizeDp.toPx() * 0.5f
-                            ),
-                            radius = sizeDp.toPx() * 0.5f,
-                            center = Offset(cx, cy)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            PremiumPinColors.bgroundBase,
+                            PremiumPinColors.bgroundBaseSec,
+                            PremiumPinColors.bgroundBase
                         )
+                    )
+                )
+                .drawBehind {
+                    val w = size.width
+                    val h = size.height
+                    if (w <= 0f || h <= 0f) return@drawBehind
+
+                    // A. Vibrant expanding background light bloom orbs
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(ambientGlowColor, Color.Transparent),
+                            center = Offset(w * 0.5f, h * 0.35f),
+                            radius = w * 0.90f * scaleBreath
+                        )
+                    )
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(PremiumPinColors.neonCyan.copy(alpha = 0.05f), Color.Transparent),
+                            center = Offset(w * 0.15f, h * 0.12f),
+                            radius = w * 0.55f
+                        )
+                    )
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(PremiumPinColors.neonPurple.copy(alpha = 0.05f), Color.Transparent),
+                            center = Offset(w * 0.85f, h * 0.85f),
+                            radius = w * 0.55f
+                        )
+                    )
+
+                    // B. Blueprint Grid Layout: ConstructPro visual language
+                    val gridSize = 45.dp.toPx()
+                    val gridC = Color(0x0900D4FF)
+                    val startX = (gridOffset % gridSize) - gridSize
+                    val startY = (gridOffset % gridSize) - gridSize
+
+                    var currX = startX
+                    while (currX < w + gridSize) {
+                        drawLine(
+                            color = gridC,
+                            start = Offset(currX, 0f),
+                            end = Offset(currX, h),
+                            strokeWidth = 0.8f
+                        )
+                        currX += gridSize
                     }
-            )
-        }
-        // vignette
+
+                    var currY = startY
+                    while (currY < h + gridSize) {
+                        drawLine(
+                            color = gridC,
+                            start = Offset(0f, currY),
+                            end = Offset(w, currY),
+                            strokeWidth = 0.8f
+                        )
+                        currY += gridSize
+                    }
+
+                    // C. Orbiting tiny architectural anchors (Blueprint crosses)
+                    val anchors = listOf(
+                        Offset(w * 0.20f, h * 0.22f),
+                        Offset(w * 0.80f, h * 0.18f),
+                        Offset(w * 0.15f, h * 0.76f),
+                        Offset(w * 0.85f, h * 0.68f),
+                        Offset(w * 0.50f, h * 0.54f)
+                    )
+                    anchors.forEachIndexed { idx, center ->
+                        val speedFactor = 0.8f + (idx * 0.25f)
+                        val angle = gridOffset * 0.012f * speedFactor
+                        val activeX = center.x + cos(angle) * 15.dp.toPx()
+                        val activeY = center.y + sin(angle) * 15.dp.toPx()
+                        
+                        val opacity = (0.22f + 0.14f * sin(gridOffset * 0.015f + idx)).coerceIn(0.06f, 0.44f)
+                        val crossC = PremiumPinColors.neonCyan.copy(alpha = opacity)
+                        val crossSize = 5.dp.toPx()
+
+                        // Smooth cross intersection drawing
+                        drawLine(crossC, Offset(activeX - crossSize, activeY), Offset(activeX + crossSize, activeY), strokeWidth = 1f)
+                        drawLine(crossC, Offset(activeX, activeY - crossSize), Offset(activeX, activeY + crossSize), strokeWidth = 1f)
+                        drawCircle(crossC, radius = 0.8f.dp.toPx(), center = Offset(activeX, activeY))
+                    }
+                }
+        )
+        // Vignette Shadow Mask
         Box(
             Modifier
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
-                        listOf(Color.Transparent, Color.Black.copy(alpha = colors.vignetteAlpha)),
-                        radius = 900f
+                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.66f)),
+                        radius = 1200f
                     )
                 )
         )
@@ -226,141 +275,238 @@ private fun AnimatedOrbBackground(colors: PinColors) {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  PREMIUM LOCK ICON  (concentric animated rings + glow)
+//  BIOMETRIC VAULT ROTATING DIAL LOCK (The center mechanical locked wheel)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @Composable
-private fun PremiumLockIcon(
+private fun BiometricVaultLock(
     unlocked: Boolean,
-    successScale: Float,
-    accentColor: Color,
-    successColor: Color,
+    progressPercent: Float,
+    isError: Boolean,
+    scaleFactor: Float
 ) {
-    val ringRotation by rememberInfiniteTransition(label = "ring_rot").animateFloat(
-        initialValue = 0f, targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing)),
-        label = "ring"
-    )
-    val pulseAlpha by rememberInfiniteTransition(label = "pulse").animateFloat(
-        initialValue = 0.25f, targetValue = 0.55f,
-        animationSpec = infiniteRepeatable(tween(2200, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "pulse"
-    )
-    val iconColor = if (unlocked) successColor else accentColor
+    val ringRotation = progressPercent * 90f
+    val pulsingGlow = 0.45f
 
-    // expanding success ring
-    val ringScale by animateFloatAsState(
-        if (unlocked) 2.8f else 1f,
-        spring(dampingRatio = Spring.DampingRatioLowBouncy), label = "ring_scale"
+    val scaleBounce by animateFloatAsState(
+        targetValue = if (unlocked) 1.22f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium, dampingRatio = Spring.DampingRatioHighBouncy),
+        label = "vault_scale_bounce"
     )
 
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.scale(successScale)) {
-        // outer glow
+    val activeStateC = when {
+        unlocked -> PremiumPinColors.neonGreen
+        isError  -> PremiumPinColors.neonPink
+        else     -> PremiumPinColors.neonCyan
+    }
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(114.dp)
+            .graphicsLayer {
+                scaleX = scaleFactor * scaleBounce
+                scaleY = scaleFactor * scaleBounce
+            }
+    ) {
+        // Back-surface physical glow bloom
         Box(
             Modifier
                 .size(110.dp)
                 .background(
                     Brush.radialGradient(
-                        listOf(iconColor.copy(alpha = if (unlocked) 0.25f else pulseAlpha * 0.4f), Color.Transparent)
+                        listOf(activeStateC.copy(alpha = if (unlocked) 0.38f else pulsingGlow * 0.16f), Color.Transparent)
                     ), CircleShape
                 )
         )
-        // expanding success ring
-        if (unlocked) {
-            Box(
-                Modifier
-                    .size(80.dp)
-                    .scale(ringScale)
-                    .border(1.5.dp, successColor.copy(alpha = 0.5f * (1f - (ringScale - 1f) / 1.8f).coerceAtLeast(0f)), CircleShape)
+
+        // Multiple concentric rotating mechanical rings
+        Canvas(Modifier.size(100.dp)) {
+            val strokeW = 1.25.dp.toPx()
+            val fineStrokeW = 0.8.dp.toPx()
+
+            // Outer Dashed blueprint tick ring (slow rotating clockwise)
+            rotate(ringRotation) {
+                for (deg in 0 until 360 step 12) {
+                    drawArc(
+                        color = activeStateC.copy(alpha = 0.25f),
+                        startAngle = deg.toFloat(),
+                        sweepAngle = 4f,
+                        useCenter = false,
+                        style = Stroke(width = strokeW, cap = StrokeCap.Round)
+                    )
+                }
+            }
+
+            // Inner counter-rotating ring segments
+            rotate(-ringRotation * 1.5f) {
+                for (deg in 0 until 360 step 36) {
+                    drawArc(
+                        color = PremiumPinColors.neonPurple.copy(alpha = 0.22f),
+                        startAngle = deg.toFloat(),
+                        sweepAngle = 14f,
+                        useCenter = false,
+                        style = Stroke(width = fineStrokeW, cap = StrokeCap.Round)
+                    )
+                }
+            }
+
+            // Solid inner border skeleton
+            drawCircle(
+                color = activeStateC.copy(alpha = 0.10f),
+                radius = size.width * 0.38f,
+                style = Stroke(width = fineStrokeW)
             )
         }
-        // rotating arcs (Canvas)
-        androidx.compose.foundation.Canvas(Modifier.size(96.dp)) {
-            val stroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
-            drawArc(iconColor.copy(alpha = 0.35f), ringRotation, 100f, false, style = stroke)
-            drawArc(iconColor.copy(alpha = 0.18f), -ringRotation * 0.7f, 60f, false, style = stroke)
+
+        // Circular sweep progress arc matching entered PIN percentage
+        val progressSweepTarget = progressPercent * 360f
+        val animatedSweepAngle by animateFloatAsState(
+            targetValue = progressSweepTarget,
+            animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy),
+            label = "sweep_progress"
+        )
+        Canvas(Modifier.size(84.dp)) {
+            drawArc(
+                color = activeStateC,
+                startAngle = -90f,
+                sweepAngle = animatedSweepAngle,
+                useCenter = false,
+                style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
+            )
         }
-        // glass circle
+
+        // Frosted central glass capsule core
         Box(
             Modifier
-                .size(72.dp)
+                .size(62.dp)
                 .clip(CircleShape)
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.08f), Color.White.copy(alpha = 0.02f))
+                        listOf(Color.White.copy(alpha = 0.08f), Color.White.copy(alpha = 0.01f))
                     )
                 )
-                .border(1.dp, iconColor.copy(alpha = 0.35f), CircleShape),
+                .border(1.2.dp, activeStateC.copy(alpha = 0.40f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (unlocked) Icons.Default.Check else Icons.Default.Lock,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(30.dp)
-            )
+            Crossfade(
+                targetState = unlocked,
+                animationSpec = tween(380, easing = EaseOutBack),
+                label = "vault_core_icon"
+            ) { isUnlocked ->
+                if (isUnlocked) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Success",
+                        tint = PremiumPinColors.neonGreen,
+                        modifier = Modifier.size(28.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Locked",
+                        tint = activeStateC,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
         }
     }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  PREMIUM PIN DOTS  (glow halo + spring)
+//  PREMIUM BIOMETRIC TERMINAL DOTS  (Glowing interface cells)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @Composable
-private fun PremiumPinDots(
+private fun PremiumBiometricTerminalDots(
     count: Int,
     filledCount: Int,
-    unlocked: Boolean,
-    hasError: Boolean,
-    shakeOffsetX: Float,
+    isUnlocked: Boolean,
+    isError: Boolean,
+    shakeOffsetX: Float
 ) {
-    val dotColor = when {
-        unlocked  -> PinTokens.accentGreen
-        hasError  -> PinTokens.errorRed
-        else      -> PinTokens.accentViolet
+    val activeStateC = when {
+        isUnlocked -> PremiumPinColors.neonGreen
+        isError    -> PremiumPinColors.neonPink
+        else       -> PremiumPinColors.neonCyan
     }
+
     Row(
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
         modifier = Modifier.offset(x = shakeOffsetX.dp)
     ) {
         repeat(count) { idx ->
-            val filled = idx < filledCount
-            val scaleFactor by animateFloatAsState(
-                if (filled) 1.28f else 1.0f,
-                spring(
-                    dampingRatio = Spring.DampingRatioHighBouncy,
-                    stiffness = Spring.StiffnessMedium
-                ), label = "dotScale_$idx"
+            val isFilled = idx < filledCount
+            
+            val coreScale by animateFloatAsState(
+                targetValue = if (isFilled) 1.0f else 0f,
+                animationSpec = if (isFilled) {
+                    spring(dampingRatio = Spring.DampingRatioHighBouncy, stiffness = Spring.StiffnessMedium)
+                } else {
+                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                },
+                label = "terminal_dot_scale_$idx"
             )
-            val size by animateDpAsState(
-                if (filled) PinTokens.dotSizeFilled else PinTokens.dotSizeEmpty,
-                spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "dot$idx"
+
+            val cellOuterScale by animateFloatAsState(
+                targetValue = if (isFilled) 1.22f else 1.0f,
+                animationSpec = spring(stiffness = Spring.StiffnessLow),
+                label = "terminal_outer_scale_$idx"
             )
+
+            val borderAlpha by animateFloatAsState(
+                targetValue = if (isFilled) 0.85f else 0.22f,
+                animationSpec = tween(140),
+                label = "terminal_dot_border_alpha_$idx"
+            )
+
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.scale(scaleFactor)
+                modifier = Modifier.size(28.dp)
             ) {
-                // glow halo
-                if (filled) {
+                // Background radial flare glow
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isFilled,
+                    enter = scaleIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                    exit = scaleOut() + fadeOut()
+                ) {
                     Box(
                         Modifier
-                            .size(size + 14.dp)
+                            .size(36.dp)
                             .background(
                                 Brush.radialGradient(
-                                    listOf(dotColor.copy(alpha = 0.30f), Color.Transparent)
+                                    listOf(activeStateC.copy(alpha = 0.22f), Color.Transparent)
                                 ), CircleShape
                             )
                     )
                 }
+
+                // Outer circular scanner ring
                 Box(
                     Modifier
-                        .size(size)
-                        .clip(CircleShape)
-                        .background(if (filled) dotColor else Color.Transparent)
+                        .size(20.dp)
+                        .graphicsLayer {
+                            scaleX = cellOuterScale
+                            scaleY = cellOuterScale
+                        }
                         .border(
                             1.5.dp,
-                            if (filled) dotColor else dotColor.copy(alpha = 0.30f),
+                            activeStateC.copy(alpha = borderAlpha),
                             CircleShape
                         )
+                )
+
+                // Springy glowing inner diamond core asset
+                Box(
+                    Modifier
+                        .size(10.dp)
+                        .graphicsLayer {
+                            scaleX = coreScale; scaleY = coreScale
+                        }
+                        .clip(CircleShape)
+                        .background(activeStateC)
+                        .drawBehind {
+                            drawCircle(activeStateC.copy(alpha = 0.35f), radius = size.width * 1.5f)
+                        }
                 )
             }
         }
@@ -368,24 +514,15 @@ private fun PremiumPinDots(
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  PREMIUM PIN KEY  (glass + top-highlight + press glow)
+//  PREMIUM INTERACTIVE NUM_KEY  (Tactile feedback micro-spring clicks)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-private val KeyLetters = mapOf(
-    "1" to "", "2" to "ABC", "3" to "DEF",
-    "4" to "GHI", "5" to "JKL", "6" to "MNO",
-    "7" to "PQRS", "8" to "TUV", "9" to "WXYZ", "0" to "+"
-)
-
 @Composable
-private fun PremiumPinKey(
+private fun PremiumInteractiveKey(
     label: String,
-    colors: PinColors,
-    accentColor: Color,
     enabled: Boolean,
-    onClick: () -> Unit,
+    onClick: () -> Unit
 ) {
-    val isEmpty = label.isEmpty()
-    if (isEmpty) {
+    if (label.isEmpty()) {
         Box(modifier = Modifier.size(PinTokens.keySize))
         return
     }
@@ -394,104 +531,66 @@ private fun PremiumPinKey(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Smooth physical spring compression under press - stabilized to 1f for web emulator compatibility
-    val scale = 1.0f
-
-    // Border glow color transition
-    val targetBorderColor = if (isPressed) accentColor else colors.border.copy(alpha = 0.5f)
-    val borderColor by animateColorAsState(
-        targetValue = targetBorderColor,
+    val glowColor = if (isPressed) PremiumPinColors.neonCyan else PremiumPinColors.neonPurple
+    val borderAlpha = if (isPressed) 0.65f else 0.12f
+    val activeBorderColor by animateColorAsState(
+        targetValue = if (isPressed) PremiumPinColors.neonCyan else Color.White.copy(alpha = borderAlpha),
         animationSpec = tween(120),
-        label = "keyBorder_$label"
+        label = "active_border_color"
     )
 
-    // Text and icon color illumination
-    val textAndIconColor by animateColorAsState(
-        targetValue = if (isPressed) accentColor else colors.text,
-        animationSpec = tween(100),
-        label = "keyText_$label"
-    )
+    // Sleek physical key inner body
+    val bodyBrush = if (isPressed) {
+        Brush.verticalGradient(
+            listOf(PremiumPinColors.neonCyan.copy(alpha = 0.14f), PremiumPinColors.neonPurple.copy(alpha = 0.04f))
+        )
+    } else {
+        Brush.verticalGradient(
+            listOf(Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.01f))
+        )
+    }
 
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(PinTokens.keySize)
+            .clip(CircleShape)
+            .background(bodyBrush)
+            .border(1.dp, activeBorderColor, CircleShape)
             .clickable(
-                enabled = enabled,
                 interactionSource = interactionSource,
-                indication = null,
+                indication = androidx.compose.foundation.LocalIndication.current,
+                enabled = enabled,
                 onClick = onClick
             )
     ) {
-        // LAYER A: Halo glow bloom on press
-        if (isPressed) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = scale * 1.35f
-                        scaleY = scale * 1.35f
-                    }
-                    .drawBehind {
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(accentColor.copy(alpha = 0.35f), Color.Transparent),
-                                center = center,
-                                radius = size.minDimension / 2f
-                            ),
-                            radius = size.minDimension / 2f
-                        )
-                    }
+        if (isBack) {
+            Icon(
+                imageVector = Icons.Default.Backspace,
+                contentDescription = "Backspace",
+                tint = if (isPressed) PremiumPinColors.neonCyan else PremiumPinColors.textPrimary,
+                modifier = Modifier.size(24.dp)
             )
-        }
-
-        // LAYER B: Clipped glassmorphic interactive button body
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .clip(CircleShape)
-                .background(colors.keyBg, CircleShape)
-                .drawWithContent {
-                    drawContent()
-                    // Glass top highlight crescent
-                    drawArc(
-                        color = colors.keyTopHighlight,
-                        startAngle = 200f, sweepAngle = 140f,
-                        useCenter = false,
-                        style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                }
-                .border(if (isPressed) 1.5.dp else 1.dp, borderColor, CircleShape)
-        ) {
-            if (isBack) {
-                Icon(
-                    Icons.Default.Backspace, "Backspace",
-                    tint = textAndIconColor, modifier = Modifier.size(24.dp)
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = label,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPressed) PremiumPinColors.neonCyan else PremiumPinColors.textPrimary,
+                    letterSpacing = 0.5.sp,
+                    textAlign = TextAlign.Center
                 )
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val sub = KeyLetters[label]
+                if (!sub.isNullOrEmpty()) {
                     Text(
-                        text = label,
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = textAndIconColor,
-                        letterSpacing = 1.sp,
+                        text = sub,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isPressed) PremiumPinColors.neonCyan.copy(alpha = 0.8f) else PremiumPinColors.textSecondary,
+                        letterSpacing = 1.2.sp,
+                        textAlign = TextAlign.Center
                     )
-                    val sub = KeyLetters[label]
-                    if (!sub.isNullOrEmpty()) {
-                        Text(
-                            text = sub,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (isPressed) accentColor.copy(alpha = 0.75f) else colors.subText,
-                            letterSpacing = 1.5.sp,
-                        )
-                    }
                 }
             }
         }
@@ -499,7 +598,7 @@ private fun PremiumPinKey(
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  MAIN PIN SCREEN
+//  MAIN PIN SCREEN LAYER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @Composable
 fun PinScreen(
@@ -511,7 +610,6 @@ fun PinScreen(
 ) {
     val context = LocalContext.current
     val haptic  = LocalHapticFeedback.current
-    val colors  = remember(dark) { pinColors(dark) }
     val credential = remember { readPinCredential(context) }
     val isSetup = credential.hash == null && !credential.disabled
     val PIN_LEN = PinTokens.pinLength
@@ -525,32 +623,39 @@ fun PinScreen(
     var shakeState by remember { mutableStateOf(false) }
     var unlocked by remember { mutableStateOf(false) }
 
-    // shake
     val dotShiftX = remember { Animatable(0f) }
     LaunchedEffect(shakeState) {
         if (shakeState) {
-            repeat(4) {
-                dotShiftX.animateTo(12f, tween(50))
-                dotShiftX.animateTo(-12f, tween(50))
-            }
-            dotShiftX.animateTo(0f, tween(50))
-            delay(180); shakeState = false
+            // High-fidelity decayed oscillatory spring wave physics sequence
+            dotShiftX.animateTo(16f, spring(dampingRatio = 0.20f, stiffness = 850f))
+            dotShiftX.animateTo(-12f, spring(dampingRatio = 0.22f, stiffness = 850f))
+            dotShiftX.animateTo(8f, spring(dampingRatio = 0.30f, stiffness = 650f))
+            dotShiftX.animateTo(-4f, spring(dampingRatio = 0.40f, stiffness = 650f))
+            dotShiftX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
+            delay(100)
+            shakeState = false
         }
     }
-    // success
+
     val successScale by animateFloatAsState(
-        if (unlocked) 1.12f else 1f,
-        spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "us"
+        if (unlocked) 1.15f else 1f,
+        spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "unlocked_scale"
     )
-    val numpadAlpha by animateFloatAsState(
+    val containerAlpha by animateFloatAsState(
         if (unlocked) 0f else 1f,
-        tween(durationMillis = 350, easing = LinearOutSlowInEasing), label = "na"
+        tween(durationMillis = 380, easing = LinearOutSlowInEasing), label = "container_alpha"
     )
     val numpadTranslationY by animateDpAsState(
-        if (unlocked) 50.dp else 0.dp,
-        spring(stiffness = Spring.StiffnessLow), label = "nt"
+        if (unlocked) 65.dp else 0.dp,
+        spring(stiffness = Spring.StiffnessLow), label = "translation_y"
     )
-    LaunchedEffect(unlocked) { if (unlocked) { delay(700); onPinVerified() } }
+
+    LaunchedEffect(unlocked) {
+        if (unlocked) {
+            delay(850)
+            onPinVerified()
+        }
+    }
 
     val currentPin = if (isSetup && inConfirm) confirmPin else pin
 
@@ -560,13 +665,24 @@ fun PinScreen(
         errorMsg = null
         if (isSetup) {
             if (!inConfirm) {
-                if (pin.length < PIN_LEN) { pin += d; if (pin.length == PIN_LEN) inConfirm = true }
+                if (pin.length < PIN_LEN) {
+                    pin += d
+                    if (pin.length == PIN_LEN) {
+                        inConfirm = true
+                    }
+                }
             } else {
                 if (confirmPin.length < PIN_LEN) {
                     confirmPin += d
                     if (confirmPin.length == PIN_LEN) {
-                        if (confirmPin == pin) { savePin(context, pin); unlocked = true }
-                        else { shakeState = true; errorMsg = "PINs don't match. Try again."; confirmPin = "" }
+                        if (confirmPin == pin) {
+                            savePin(context, pin)
+                            unlocked = true
+                        } else {
+                            shakeState = true
+                            errorMsg = "PINs don't match. Try again."
+                            confirmPin = ""
+                        }
                     }
                 }
             }
@@ -574,14 +690,21 @@ fun PinScreen(
             if (pin.length < PIN_LEN) {
                 pin += d
                 if (pin.length == PIN_LEN) {
-                    if (verifyPin(pin, credential)) unlocked = true
-                    else { shakeState = true; errorMsg = "Incorrect PIN. Try again."; pin = "" }
+                    if (verifyPin(pin, credential)) {
+                        unlocked = true
+                    } else {
+                        shakeState = true
+                        errorMsg = "Incorrect PIN. Try again."
+                        pin = ""
+                    }
                 }
             }
         }
     }
+
     fun onBack() {
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); errorMsg = null
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        errorMsg = null
         if (isSetup && inConfirm) {
             if (confirmPin.isNotEmpty()) {
                 confirmPin = confirmPin.dropLast(1)
@@ -594,7 +717,6 @@ fun PinScreen(
         }
     }
 
-    // Capture device system back gesture and back button clicks safely
     BackHandler {
         if (isSetup && inConfirm) {
             inConfirm = false
@@ -605,81 +727,87 @@ fun PinScreen(
         }
     }
 
-    // subtitle breathing
-    val breatheAlpha by rememberInfiniteTransition(label = "breathe").animateFloat(
-        0.55f, 1f,
-        infiniteRepeatable(tween(3000, easing = EaseInOutSine), RepeatMode.Reverse),
-        label = "breathe"
-    )
+    // Breathing label animation loop
+    val subtitleBreatheAlpha = 0.85f
 
-    // ── LAYOUT ──────────────────────────────────────────────────────────────
-    Box(Modifier.fillMaxSize().background(colors.bgGrad)) {
-        AnimatedOrbBackground(colors)
+    // ── SCENE TREE LAYOUT ───────────────────────────────────────────────────
+    Box(Modifier.fillMaxSize()) {
+        AnimatedSpaceBlueprintBackground(
+            pinLength = currentPin.length,
+            isError = errorMsg != null,
+            isSuccess = unlocked
+        )
 
         val scrollState = rememberScrollState()
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp)
+                .padding(horizontal = 24.dp)
                 .systemBarsPadding()
                 .verticalScroll(scrollState)
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(8.dp))
 
-            // ── Shield badge ────────────────────────────────────────────────
+            // Upper secure padlock badge
             if (!unlocked) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(PinTokens.accentViolet.copy(alpha = 0.08f))
-                        .border(0.5.dp, PinTokens.accentViolet.copy(alpha = 0.18f), RoundedCornerShape(20.dp))
+                        .background(PremiumPinColors.neonPurple.copy(alpha = 0.08f))
+                        .border(0.5.dp, PremiumPinColors.neonPurple.copy(alpha = 0.18f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 12.dp, vertical = 5.dp)
                 ) {
                     Icon(
-                        Icons.Outlined.Shield, null,
-                        tint = PinTokens.accentViolet.copy(alpha = 0.7f),
+                        imageVector = Icons.Outlined.Shield,
+                        contentDescription = "Secured",
+                        tint = PremiumPinColors.neonPurple.copy(alpha = 0.75f),
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
-                        "Secured", fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-                        color = PinTokens.accentViolet.copy(alpha = 0.8f),
+                        "Secured",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PremiumPinColors.neonPurple.copy(alpha = 0.85f),
                         letterSpacing = 1.2.sp
                     )
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(24.dp))
+            } else {
+                Spacer(Modifier.height(42.dp))
             }
 
-            // ── Lock icon ───────────────────────────────────────────────────
+            // Central rotating dialing vault lock
             Box(
                 modifier = Modifier
                     .graphicsLayer {
-                        translationX = dotShiftX.value * 1.1f
-                        rotationZ = dotShiftX.value * 0.7f
+                        translationX = dotShiftX.value * 1.05f
+                        rotationZ = dotShiftX.value * 0.65f
                     }
             ) {
-                PremiumLockIcon(
+                BiometricVaultLock(
                     unlocked = unlocked,
-                    successScale = successScale,
-                    accentColor = PinTokens.accentViolet,
-                    successColor = PinTokens.accentGreen,
+                    progressPercent = currentPin.length.toFloat() / PIN_LEN.toFloat(),
+                    isError = errorMsg != null,
+                    scaleFactor = successScale
                 )
             }
             Spacer(Modifier.height(24.dp))
 
-            // ── Title ───────────────────────────────────────────────────────
+            // Text description headers
             Text(
                 text = when {
-                    unlocked  -> "Access Granted"
-                    isSetup   -> "Create PIN"
-                    else      -> "Welcome back"
+                    unlocked -> "Access Granted"
+                    isSetup  -> "Create PIN"
+                    else     -> "Welcome back"
                 },
-                fontSize = 24.sp,
+                fontSize = 25.sp,
                 fontWeight = FontWeight.Black,
-                color = if (unlocked) PinTokens.accentGreen else colors.text,
+                color = if (unlocked) PremiumPinColors.neonGreen else PremiumPinColors.textPrimary,
                 letterSpacing = (-0.3).sp,
             )
             if (!isSetup && !unlocked) {
@@ -687,36 +815,36 @@ fun PinScreen(
                     text = userName,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
-                    color = PinTokens.accentBlue,
+                    color = PremiumPinColors.neonCyan,
                     letterSpacing = 0.3.sp,
                 )
             }
             Spacer(Modifier.height(6.dp))
             Text(
                 text = when {
-                    unlocked              -> "Entering app…"
+                    unlocked              -> "Entering ConstructPro…"
                     isSetup && !inConfirm -> "Choose a 4-digit PIN"
                     isSetup               -> "Confirm your PIN"
                     else                  -> "Enter your 4-digit PIN"
                 },
                 fontSize = 13.sp,
-                color = colors.subText.copy(alpha = breatheAlpha),
+                color = PremiumPinColors.textSecondary.copy(alpha = subtitleBreatheAlpha),
                 textAlign = TextAlign.Center,
                 letterSpacing = 0.2.sp,
             )
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(30.dp))
 
-            // ── PIN dots ────────────────────────────────────────────────────
-            PremiumPinDots(
+            // Glowing indicator terminal capsules
+            PremiumBiometricTerminalDots(
                 count = PIN_LEN,
                 filledCount = currentPin.length,
-                unlocked = unlocked,
-                hasError = errorMsg != null,
-                shakeOffsetX = dotShiftX.value,
+                isUnlocked = unlocked,
+                isError = errorMsg != null,
+                shakeOffsetX = dotShiftX.value
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
 
-            // ── Error chip ──────────────────────────────────────────────────
+            // Fluid error sliding box chip
             AnimatedVisibility(
                 visible = errorMsg != null,
                 enter = fadeIn(tween(200)) + slideInVertically { -it / 2 },
@@ -725,38 +853,40 @@ fun PinScreen(
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(PinTokens.errorRed.copy(alpha = 0.10f))
-                        .border(0.5.dp, PinTokens.errorRed.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
+                        .background(PremiumPinColors.neonPink.copy(alpha = 0.10f))
+                        .border(0.5.dp, PremiumPinColors.neonPink.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
                         .padding(horizontal = 16.dp, vertical = 7.dp)
                 ) {
                     Text(
-                        errorMsg ?: "", color = PinTokens.errorRed,
-                        fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                        text = errorMsg ?: "",
+                        color = PremiumPinColors.neonPink,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
                         letterSpacing = 0.2.sp,
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
 
-            // ── Gradient divider ────────────────────────────────────────────
+            // Soft glowing layout divider
             Box(
                 Modifier
                     .fillMaxWidth(0.35f)
                     .height(1.dp)
                     .background(
                         Brush.horizontalGradient(
-                            listOf(Color.Transparent, PinTokens.accentViolet.copy(alpha = 0.22f), Color.Transparent)
+                            listOf(Color.Transparent, PremiumPinColors.neonCyan.copy(alpha = 0.18f), Color.Transparent)
                         )
                     )
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
 
-            // ── Numpad ──────────────────────────────────────────────────────
+            // Numpad keypad matrix
             Column(
                 verticalArrangement = Arrangement.spacedBy(PinTokens.keySpacing),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.graphicsLayer {
-                    alpha = numpadAlpha
+                    alpha = containerAlpha
                     translationY = numpadTranslationY.toPx()
                 }
             ) {
@@ -768,37 +898,40 @@ fun PinScreen(
                 ).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(PinTokens.keySpacing)) {
                         row.forEach { key ->
-                            PremiumPinKey(
+                            PremiumInteractiveKey(
                                 label = key,
-                                colors = colors,
-                                accentColor = PinTokens.accentViolet,
                                 enabled = !unlocked,
                                 onClick = {
                                     when (key) {
                                         "⌫" -> onBack()
-                                        ""  -> {}
                                         else -> onKey(key)
                                     }
-                                },
+                                }
                             )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(26.dp))
 
-            // ── Skip or Reset/Logout Actions ────────────────────────────────
+            // Action labels (Skip or Sign-out reset)
             if (isSetup && !inConfirm) {
                 Text(
-                    "Skip for now",
+                    text = "Skip for now",
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.subText,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PremiumPinColors.textSecondary,
                     letterSpacing = 0.3.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { disablePin(context); onPinVerified() }
+                        .clickable {
+                            println("!!! CLICKED SKIP FOR NOW !!!")
+                            disablePin(context)
+                            println("!!! DISABLE PIN COMPLETED !!!")
+                            onPinVerified()
+                            println("!!! ON PIN VERIFIED COMPLETED !!!")
+                        }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             } else if (!isSetup && !unlocked) {
@@ -811,49 +944,37 @@ fun PinScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Icon(
-                        Icons.Default.Logout,
+                        imageVector = Icons.Default.Logout,
                         contentDescription = "Sign out",
-                        modifier = Modifier.size(16.dp),
-                        tint = PinTokens.errorRed.copy(alpha = 0.8f)
+                        tint = PremiumPinColors.neonPink.copy(alpha = 0.85f),
+                        modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        "Reset PIN & Sign Out",
+                        text = "Reset PIN & Sign Out",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = PinTokens.errorRed.copy(alpha = 0.9f),
+                        color = PremiumPinColors.neonPink.copy(alpha = 0.90f),
                         letterSpacing = 0.2.sp
                     )
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(36.dp))
         }
     }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  PREVIEW COMPOSABLES  – visible in Android Studio "Split / Design" pane
+//  PREVIEW DESIGNERS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @Preview(
-    name = "🌙  Dark – Verify",
+    name = "🌙 Premium Void - Verify",
     showBackground = true,
     showSystemUi = true,
-    backgroundColor = 0xFF020611,
+    backgroundColor = 0xFF020817,
     group = "PinScreen",
 )
 @Composable
 private fun PreviewPinDark() {
     PinScreen(dark = true, userName = "Alexandra", onPinVerified = {})
-}
-
-@Preview(
-    name = "☀️  Light – Verify",
-    showBackground = true,
-    showSystemUi = true,
-    backgroundColor = 0xFFF0F4FF,
-    group = "PinScreen",
-)
-@Composable
-private fun PreviewPinLight() {
-    PinScreen(dark = false, userName = "Alexandra", onPinVerified = {})
 }

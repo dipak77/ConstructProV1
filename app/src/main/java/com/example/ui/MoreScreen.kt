@@ -1522,7 +1522,12 @@ private fun PremiumAccountCard(
                         .clickable {
                             // Clear stored PIN so setup runs again on next app open
                             context.getSharedPreferences("constructpro_prefs", android.content.Context.MODE_PRIVATE)
-                                .edit().remove("app_security_pin").apply()
+                                .edit()
+                                .remove("app_security_pin")
+                                .remove("app_security_pin_hash")
+                                .remove("app_security_pin_salt")
+                                .putBoolean("app_security_pin_disabled", false)
+                                .apply()
                             android.widget.Toast.makeText(context,
                                 "PIN cleared. You will set a new PIN next time you open the app.",
                                 android.widget.Toast.LENGTH_LONG).show()
@@ -2181,6 +2186,8 @@ private fun PremiumThemeBackupCard(
                 modifier = Modifier.weight(1f)
             )
         }
+
+
     }
 }
 

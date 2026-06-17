@@ -478,6 +478,8 @@ private fun PremiumMainPage(
                             searchText = txSearchQuery,
                             onSearchChange = onTxSearchQueryChange,
                             dark = dark,
+                            txDatePreset = txDatePreset,
+                            onOpenDateFilter = onOpenDateFilter,
                             onSelectTx = onSelectTx,
                             onAddPayment = { viewModel.showTransactionDialog = true }
                         )

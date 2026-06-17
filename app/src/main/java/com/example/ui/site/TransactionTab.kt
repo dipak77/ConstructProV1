@@ -31,9 +31,15 @@ fun TransactionTab(
     searchText: String,
     onSearchChange: (String) -> Unit,
     dark: Boolean,
+    txDatePreset: String,
+    onOpenDateFilter: () -> Unit,
     onSelectTx: (Transaction) -> Unit,
     onAddPayment: () -> Unit
 ) {
+    val totalIn  = txList.filter { it.type == "Money In" }.sumOf { it.amount }
+    val totalOut = txList.filter { it.type == "Money Out" }.sumOf { it.amount }
+    val net      = totalIn - totalOut
+
     val filteredTx = remember(txList, searchText) {
         if (searchText.isBlank()) txList
         else txList.filter {
@@ -46,12 +52,47 @@ fun TransactionTab(
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        // Summary Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (dark)
+                        Brush.horizontalGradient(listOf(Color(0xFF0D1B3E), Color(0xFF111827)))
+                    else
+                        Brush.horizontalGradient(listOf(Color(0xFFEEF2FF), Color(0xFFF8FAFF)))
+                )
+                .padding(horizontal = 18.dp, vertical = 14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MiniFinanceStat(
+                    dark = dark, label = "IN",
+                    value = formatIndianRupees(totalIn),
+                    color = EmeraldGlow, modifier = Modifier.weight(1f)
+                )
+                MiniFinanceStat(
+                    dark = dark, label = "OUT",
+                    value = formatIndianRupees(totalOut),
+                    color = RoseGlow, modifier = Modifier.weight(1f)
+                )
+                MiniFinanceStat(
+                    dark = dark, label = "NET",
+                    value = formatIndianRupees(kotlin.math.abs(net)),
+                    color = if (net >= 0) EmeraldGlow else RoseGlow,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // Search and filter row
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -60,84 +101,79 @@ fun TransactionTab(
                     value = searchText,
                     onValueChange = onSearchChange,
                     dark = dark,
-                    placeholder = "Search transactions, reference or description..."
+                    placeholder = "Search description, party..."
                 )
             }
-            Button(
-                onClick = onAddPayment,
+
+            Row(
                 modifier = Modifier
-                    .height(54.dp)
-                    .widthIn(min = 90.dp, max = 130.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (dark) NeonCyan.copy(alpha = 0.2f) else LightBlue.copy(alpha = 0.15f),
-                    contentColor = if (dark) NeonCyan else Color(0xFF1D4ED8)
-                ),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, if (dark) NeonCyan.copy(alpha = 0.4f) else LightBlue.copy(alpha = 0.4f)),
-                contentPadding = PaddingValues(horizontal = 12.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (dark) Color(0xFF1E2D4A).copy(alpha = 0.6f) else Color(0xFFE2E8F4))
+                    .border(1.dp, if (dark) Color(0xFF2D3F5E) else Color(0xFFCBD5E1), RoundedCornerShape(10.dp))
+                    .clickable { onOpenDateFilter() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "New Transaction",
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "New",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.CalendarToday,
+                    contentDescription = "Date Filter",
+                    tint = EmeraldGlow,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = if (txDatePreset == "All") "All Dates" else txDatePreset,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (dark) Color.White else Color(0xFF1E293B)
+                )
             }
         }
 
+        val txRunningBalances = remember(filteredTx) {
+            val map = mutableMapOf<Int, Double>()
+            var running = 0.0
+            val chronological = filteredTx.sortedWith(compareBy({ it.date }, { it.id }))
+            for (tx in chronological) {
+                running += if (tx.type == "Money In") tx.amount else -tx.amount
+                map[tx.id] = running
+            }
+            map
+        }
+
         if (filteredTx.isEmpty()) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                PremiumEmptyState(dark = dark, message = "No transactions recorded yet")
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                val emptyMessage = if (searchText.isNotEmpty() || txDatePreset != "All") {
+                    "No matching transactions found"
+                } else {
+                    "No transactions logged yet"
+                }
+                PremiumEmptyState(dark = dark, message = emptyMessage)
             }
         } else {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 84.dp),
+                    contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 90.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    item {
+                        Text(
+                            text = "All Receipts  ·  ${filteredTx.size}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (dark) Color(0xFF94A3B8) else Color(0xFF64748B),
+                            letterSpacing = 0.3.sp,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
                     items(filteredTx, key = { it.id }) { tx ->
                         PremiumTransactionCard(
                             tx = tx,
                             dark = dark,
+                            runningBalance = txRunningBalances[tx.id],
                             onClick = { onSelectTx(tx) }
                         )
-                    }
-                }
-
-                // Add trans Floating CTA button
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 16.dp, end = 4.dp)
-                ) {
-                    Button(
-                        onClick = onAddPayment,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5D53EA)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .height(48.dp)
-                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
-                            Text("RECORD TRANSACTION", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
                     }
                 }
             }

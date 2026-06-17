@@ -124,3 +124,14 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+// Automatically publish the built APK to .build-outputs for the platform
+tasks.register<Copy>("copyApkToBuildOutputs") {
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(rootProject.file(".build-outputs"))
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy("copyApkToBuildOutputs")
+}

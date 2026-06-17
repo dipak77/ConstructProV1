@@ -325,6 +325,17 @@ fun UnifiedTransactionFormContent(
         }
     }
 
+    LaunchedEffect(type) {
+        if (description.isBlank() || description == "Payment Paid" || description == "Payment Received") {
+            if (type == "Money In") {
+                onDescriptionChange("Payment Received")
+            } else {
+                onDescriptionChange("Payment Paid")
+            }
+            descError = null
+        }
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -658,7 +669,7 @@ fun UnifiedTransactionFormContent(
             }
         }
 
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             GlassTextField(
                 value = description,
                 onValueChange = {
@@ -672,6 +683,58 @@ fun UnifiedTransactionFormContent(
             )
             if (descError != null) {
                 Text(descError!!, color = Color.Red, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+            }
+
+            // Quick suggestion templates based on payment direction
+            val suggestions = if (type == "Money In") {
+                listOf("Payment Received", "Client Advance", "Invoice Settlement", "Cash Deposit", "Interest Received")
+            } else {
+                listOf("Payment Paid", "Material Purchase", "Worker Daily Wages", "Fuel Expense", "Vendor Advance", "Office Supplies")
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                suggestions.forEach { label ->
+                    val isSelected = description == label
+                    val activeColor = if (type == "Money In") NeonGreen else NeonPink
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isSelected) activeColor.copy(alpha = 0.15f)
+                                else Color.Transparent
+                            )
+                            .border(
+                                1.dp,
+                                if (isSelected) activeColor
+                                else (if (dark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.15f)),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable {
+                                onDescriptionChange(label)
+                                descError = null
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) {
+                                if (type == "Money In") (if (dark) NeonGreen else Color(0xFF047857))
+                                else (if (dark) NeonPink else Color(0xFFBE185D))
+                            } else {
+                                if (dark) TextSecondary else TextSecondaryLight
+                            },
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
             }
         }
 

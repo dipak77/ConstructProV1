@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -175,44 +176,6 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.sp
                     )
-
-                    // Always visible prominent Workspace Demo Entry Button
-                    GlassButton(
-                        onClick = {
-                            val user = GoogleUser(
-                                displayName = "ConstructPro Demo",
-                                email = "demo.contractor@constructpro.net",
-                                photoUrl = null,
-                                isGuest = true
-                            )
-                            viewModel.handleGoogleSignIn(user, context)
-                            Toast.makeText(context, "Welcome to ConstructPro Demo Sandbox!", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        glowColor = if (dark) NeonGreen else Color(0xFF10B981),
-                        darkTheme = dark
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Security,
-                                contentDescription = null,
-                                tint = if (dark) Color.Black else Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Workspace Demo Entry",
-                                color = if (dark) Color.Black else Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
 
                     if (isConnecting) {
                         Column(
@@ -503,57 +466,6 @@ fun GoogleLoginScreen(viewModel: MainViewModel) {
                                     tint = NeonCyan,
                                     modifier = Modifier.size(18.dp)
                                 )
-                            }
-                        }
-                    }
-
-                    // Account Option 2: Demo Contractor
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val user = GoogleUser(
-                                        displayName = "ConstructPro Demo",
-                                        email = "demo.contractor@constructpro.net",
-                                        photoUrl = null,
-                                        isGuest = true
-                                    )
-                                    viewModel.handleGoogleSignIn(user, context)
-                                    showAccountChooser = false
-                                    Toast.makeText(context, "Entered Workspace Demo Mode", Toast.LENGTH_SHORT).show()
-                                },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (dark) Color(0x3B1F2937) else Color(0xFFF3F4F6)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .background(Color(0xFF10B981), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("CP", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "ConstructPro Workspace Demo",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = if (dark) Color.White else Color.Black
-                                    )
-                                    Text(
-                                        text = "demo.contractor@constructpro.net",
-                                        fontSize = 11.sp,
-                                        color = Color.Gray
-                                    )
-                                }
                             }
                         }
                     }

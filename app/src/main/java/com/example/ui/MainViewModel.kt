@@ -212,6 +212,7 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
     }
 
     fun handleGoogleSignIn(user: GoogleUser, context: Context) {
+        println("!!! MainViewModel.handleGoogleSignIn START user=${user.email} !!!")
         _userSession.value = user
         // Persist session
         val prefs = context.getSharedPreferences("constructpro_prefs", Context.MODE_PRIVATE)
@@ -221,7 +222,9 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
         editor.putString("auth_photo", user.photoUrl ?: "")
         editor.putBoolean("auth_guest", user.isGuest)
         editor.apply()
+        println("!!! MainViewModel.handleGoogleSignIn SAVED PREFS !!!")
         checkAndSeedDemoData()
+        println("!!! MainViewModel.handleGoogleSignIn END !!!")
     }
 
     fun handleGoogleSignOut(context: Context) {
@@ -257,13 +260,26 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
     }
 
     private fun checkAndSeedDemoData() {
-        val user = _userSession.value
-        if (user != null && user.email.trim().lowercase() == "demo.contractor@constructpro.net") {
-            viewModelScope.launch {
-                val currentProjects = repository.allProjects.firstOrNull() ?: emptyList()
-                if (currentProjects.isEmpty()) {
-                    seedComprehensiveDemoData()
+        // Seeding disabled for production ready clean database
+    }
+
+    fun triggerManualDemoSeeding(clearFirst: Boolean = false) {
+        viewModelScope.launch {
+            try {
+                if (clearFirst) {
+                    val allProj = repository.allProjects.firstOrNull() ?: emptyList()
+                    allProj.forEach { repository.deleteProject(it) }
+                    
+                    val allWork = repository.allWorkers.firstOrNull() ?: emptyList()
+                    allWork.forEach { repository.deleteWorker(it) }
+                    
+                    val allLeadsList = repository.allLeads.firstOrNull() ?: emptyList()
+                    allLeadsList.forEach { repository.deleteLead(it) }
                 }
+                seedComprehensiveDemoData()
+                emitEvent(UiEvent.ShowToast("Successfully seeded comprehensive demo data!"))
+            } catch (e: Exception) {
+                emitEvent(UiEvent.ShowError("Failed to seed demo data", e))
             }
         }
     }

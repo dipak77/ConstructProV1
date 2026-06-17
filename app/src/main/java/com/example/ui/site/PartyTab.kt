@@ -39,93 +39,173 @@ fun PartyTab(
     onSelectWorker: (Worker) -> Unit,
     onAddParty: () -> Unit
 ) {
+    val totalAdvance = workers.sumOf { w ->
+        val txs = projectTransactions.filter { it.partyId == w.id || it.partyName == w.name }
+        val d = txs.filter { it.type == "Money Out" }.sumOf { it.amount } -
+                txs.filter { it.type == "Money In" }.sumOf { it.amount }
+        if (d > 0) d else 0.0
+    }
+    val totalPending = workers.sumOf { w ->
+        val txs = projectTransactions.filter { it.partyId == w.id || it.partyName == w.name }
+        val d = txs.filter { it.type == "Money Out" }.sumOf { it.amount } -
+                txs.filter { it.type == "Money In" }.sumOf { it.amount }
+        if (d < 0) -d else 0.0
+    }
+
     val filteredWorkers = remember(workers, searchText) {
         if (searchText.isBlank()) workers
         else workers.filter { it.name.contains(searchText, ignoreCase = true) || it.role.contains(searchText, ignoreCase = true) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(modifier = Modifier.weight(1f)) {
-                PremiumSearchBar(
-                    value = searchText,
-                    onValueChange = onSearchChange,
+        // Stats Row
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                PremiumStatCard(
+                    modifier = Modifier.weight(1f),
                     dark = dark,
-                    placeholder = "Search party, worker or labour..."
+                    label = "PAID",
+                    value = formatIndianRupees(totalAdvance),
+                    valueColor = RoseGlow,
+                    icon = Icons.Default.TrendingUp,
+                    gradient = Brush.linearGradient(
+                        listOf(RoseGlow.copy(alpha = 0.15f), RoseGlow.copy(alpha = 0.05f))
+                    ),
+                    borderColor = RoseGlow.copy(alpha = 0.3f)
+                )
+                PremiumStatCard(
+                    modifier = Modifier.weight(1f),
+                    dark = dark,
+                    label = "RECEIVED",
+                    value = formatIndianRupees(totalPending),
+                    valueColor = EmeraldGlow,
+                    icon = Icons.Default.TrendingDown,
+                    gradient = Brush.linearGradient(
+                        listOf(EmeraldGlow.copy(alpha = 0.15f), EmeraldGlow.copy(alpha = 0.05f))
+                    ),
+                    borderColor = EmeraldGlow.copy(alpha = 0.3f)
                 )
             }
-            Button(
-                onClick = onAddParty,
-                modifier = Modifier
-                    .height(54.dp)
-                    .widthIn(min = 90.dp, max = 130.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (dark) NeonGreen.copy(alpha = 0.2f) else Color(0xFF10B981).copy(alpha = 0.15f),
-                    contentColor = if (dark) NeonGreen else Color(0xFF047857)
-                ),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, if (dark) NeonGreen.copy(alpha = 0.4f) else Color(0xFF10B981).copy(alpha = 0.4f)),
-                contentPadding = PaddingValues(horizontal = 12.dp)
+        }
+
+        // Team Header
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "${workers.size} Team Members",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (dark) Color(0xFFE2E8F4) else Color(0xFF1E293B)
+                    )
+                    Text(
+                        text = "Tap member for balance details",
+                        fontSize = 11.sp,
+                        color = if (dark) Color(0xFF475569) else Color(0xFF94A3B8)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(VioletGlow.copy(alpha = 0.12f))
+                        .border(1.dp, VioletGlow.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                        .clickable(onClick = onAddParty)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Add Party →",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = VioletGlow
+                    )
+                }
+            }
+        }
+
+        // Search Bar
+        item {
+            PremiumSearchBar(
+                value = searchText,
+                onValueChange = onSearchChange,
+                dark = dark,
+                placeholder = "Search worker or role..."
+            )
+        }
+
+        // Filter Row
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(AquaGlow.copy(alpha = 0.1f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Add Party",
-                        modifier = Modifier.size(16.dp)
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = null,
+                        tint = AquaGlow,
+                        modifier = Modifier.size(14.dp)
                     )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Add",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "Filter & Sort",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AquaGlow
+                    )
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = AquaGlow,
+                        modifier = Modifier.size(13.dp)
                     )
                 }
+                Text(
+                    text = "${filteredWorkers.size} results",
+                    fontSize = 11.sp,
+                    color = if (dark) Color(0xFF475569) else Color(0xFF94A3B8)
+                )
             }
         }
 
-        val partyDiffs = remember(filteredWorkers, projectTransactions) {
-            filteredWorkers.associateWith { wrk ->
-                val rx = projectTransactions.filter { it.partyName == wrk.name && it.type == "Money In" }.sumOf { it.amount }
-                val tx = projectTransactions.filter { it.partyName == wrk.name && it.type == "Money Out" }.sumOf { it.amount }
-                rx - tx
-            }
+        val partyDiffs = filteredWorkers.associateWith { wrk ->
+            val rx = projectTransactions.filter { it.partyName == wrk.name && it.type == "Money In" }.sumOf { it.amount }
+            val tx = projectTransactions.filter { it.partyName == wrk.name && it.type == "Money Out" }.sumOf { it.amount }
+            rx - tx
         }
 
         if (filteredWorkers.isEmpty()) {
-            Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                PremiumEmptyState(dark = dark, message = "No parties or workers found")
-            }
+            item { PremiumEmptyState(dark = dark, message = "No matching workers found") }
         } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(filteredWorkers, key = { it.id }) { worker ->
-                    val diff = partyDiffs[worker] ?: 0.0
-                    PremiumPartyCard(
-                        worker = worker,
-                        diff = diff,
-                        dark = dark,
-                        onClick = { onSelectWorker(worker) }
-                    )
-                }
+            items(filteredWorkers, key = { it.id }) { worker ->
+                val diff = partyDiffs[worker] ?: 0.0
+                PremiumPartyCard(
+                    worker = worker,
+                    diff = diff,
+                    dark = dark,
+                    onClick = { onSelectWorker(worker) }
+                )
             }
         }
+
+        item { Spacer(modifier = Modifier.height(80.dp)) }
     }
 }
 

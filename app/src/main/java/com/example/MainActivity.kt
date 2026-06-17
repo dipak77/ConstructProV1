@@ -40,6 +40,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.EaseInOutSine
+import androidx.compose.animation.core.EaseInOutQuad
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.DrawerValue
@@ -100,7 +120,11 @@ import com.example.data.Worker
 import com.example.ui.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.flow.collectLatest
+import com.example.ui.components.LowerMainMenu
+import com.example.ui.components.DrawerContent
+import com.example.ui.components.SidebarNavRow
 
+// Build trace token: v1.0.1 - ConstructPro Compiled Build
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels {
         val database = AppDatabase.getDatabase(applicationContext)
@@ -181,6 +205,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val pinCredential = remember(userSession) { readPinCredential(applicationContext) }
+                    // Bypass PIN checks if PIN is disabled.
                     val pinVerifiedState = pinVerified || pinCredential.disabled
 
                     when {
@@ -282,8 +307,10 @@ fun ScaffoldFrame(viewModel: MainViewModel) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            DrawerContent(viewModel = viewModel) {
-                coroutineScope.launch { drawerState.close() }
+            ModalDrawerSheet {
+                DrawerContent(viewModel = viewModel) {
+                    coroutineScope.launch { drawerState.close() }
+                }
             }
         },
         gesturesEnabled = true
@@ -376,30 +403,21 @@ fun ScaffoldFrame(viewModel: MainViewModel) {
                         }
                     }
 
+                    // Premium Glassmorphic Bottom Navigation Dock
                     if (currentTab != AppScreen.Site) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 8.dp)
-                                .height(66.dp)
-                                .background(if (dark) Color(0x7D0B0F19) else Color(0xDDF8FAFC), RoundedCornerShape(24.dp))
-                                .border(BorderStroke(1.dp, if (dark) GlassBorderDark else Color(0x1F6366F1)), RoundedCornerShape(24.dp)),
-                            horizontalArrangement = Arrangement.SpaceAround,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            BottomBarNavItem(Icons.Default.Dashboard, currentTab == AppScreen.Dashboard, dark, "Dashboard") { viewModel.currentScreen = AppScreen.Dashboard }
-                            BottomBarNavItem(Icons.Default.BusinessCenter, currentTab == AppScreen.Money, dark, "Commercial") { viewModel.currentScreen = AppScreen.Money }
-                            BottomBarNavItem(Icons.Default.TaskAlt, currentTab == AppScreen.Tasks, dark, "Tasks") { viewModel.currentScreen = AppScreen.Tasks }
-                            BottomBarNavItem(Icons.Default.EventAvailable, currentTab == AppScreen.Site, dark, "Site") { viewModel.currentScreen = AppScreen.Site }
-                            BottomBarNavItem(Icons.Default.Menu, currentTab == AppScreen.More, dark, "More") { viewModel.currentScreen = AppScreen.More }
-                        }
+                        LowerMainMenu(
+                            currentTab = currentTab,
+                            dark = dark,
+                            onNavigate = { viewModel.currentScreen = it }
+                        )
                     }
                 }
             }
         }
 
-        if (currentTab != AppScreen.Site && currentTab != AppScreen.Money) {
-            FloatingActionButton(
+        // Premium Neo-AI Fluent Action Button - Dynamic contextual entry on Screens (except Commercial/Money and Dashboard)
+        if (currentTab != AppScreen.Money && currentTab != AppScreen.Dashboard) {
+            NeoAiFloatingActionButton(
                 onClick = {
                     when (currentTab) {
                         AppScreen.Dashboard -> showQuickDialog = true
@@ -418,16 +436,11 @@ fun ScaffoldFrame(viewModel: MainViewModel) {
                         AppScreen.More -> showProjectDialog = true
                     }
                 },
-                containerColor = NeonPurple,
-                contentColor = Color.Black,
-                shape = CircleShape,
+                darkTheme = dark,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = if (isDesktopWidth) 24.dp else 94.dp, end = 24.dp)
-                    .size(56.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "New Record action", modifier = Modifier.size(28.dp))
-            }
+                    .padding(bottom = if (isDesktopWidth || currentTab == AppScreen.Site) 24.dp else 102.dp, end = 20.dp)
+            )
         }
     }
 
@@ -577,379 +590,148 @@ private fun TogglePill(
     }
 }
 
-@Composable
-fun SidebarNavRow(label: String, icon: ImageVector, active: Boolean, darkTheme: Boolean, onClick: () -> Unit) {
-    val bg = if (active) {
-        if (darkTheme) NeonCyan.copy(alpha = 0.15f) else Color(0xFF0284C7).copy(alpha = 0.10f)
-    } else Color.Transparent
-    val tc = if (active) {
-        if (darkTheme) NeonCyan else Color(0xFF0284C7)
-    } else if (darkTheme) TextSecondary else TextSecondaryLight
-
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(bg).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = tc, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(label, color = tc, fontSize = 14.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
-    }
-}
 
 @Composable
-fun BottomBarNavItem(icon: ImageVector, active: Boolean, darkTheme: Boolean, label: String, onClick: () -> Unit) {
-    val tc = if (active) {
-        if (darkTheme) NeonCyan else Color(0xFF0369A1)
-    } else if (darkTheme) TextSecondary else TextSecondaryLight
-    val bubbleBg = if (active) {
-        if (darkTheme) NeonCyan.copy(alpha = 0.12f) else Color(0x1F0284C7)
-    } else Color.Transparent
-
-    Column(
-        modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(bubbleBg).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(icon, contentDescription = label, tint = tc, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(label, color = tc, fontSize = 11.sp, fontWeight = if (active) FontWeight.Black else FontWeight.Bold)
-    }
-}
-
-@Composable
-fun DrawerContent(
-    viewModel: MainViewModel,
-    onClose: () -> Unit
-) {
-    val dark = viewModel.darkThemeEnabled
-    val currentProject by viewModel.activeProject.collectAsState()
-    val userSession by viewModel.userSession.collectAsState()
-    val currentTab = viewModel.currentScreen
-    val activeSiteTab = viewModel.activeSiteTab
-
-    val projectName = currentProject?.name ?: ""
-    val userEmail = userSession?.email ?: ""
-    val userName = userSession?.displayName ?: "Guest"
-
-    // Compute initials dynamically from user name as fallback for profile picture placeholder
-    val userInitials = userName.split(" ")
-        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
-        .joinToString("")
-        .take(2)
-        .ifEmpty { "U" }
-
-    Column(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(310.dp)
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        if (dark) Color(0xFF0F172A) else Color(0xFFF8FAFC),
-                        if (dark) Color(0xFF1E1B4B) else Color(0xFFEEF2F6),
-                        if (dark) Color(0xFF090D1A) else Color(0xFFE2E8F0)
-                    )
-                )
-            )
-            .border(
-                BorderStroke(
-                    1.dp,
-                    if (dark) GlassBorderDark else Color(0x330284C7)
-                ),
-                RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
-            )
-            .padding(24.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            // Profile & Project Badge Block (arranged vertically exactly as in the image)
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
-                // Circular Profile Photo
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    Color(0xFF6366F1),
-                                    Color(0xFF4F46E5),
-                                    Color(0xFF312E81)
-                                )
-                            )
-                        )
-                        .border(1.5.dp, Color.White.copy(alpha = 0.4f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val photo = userSession?.photoUrl
-                    if (!photo.isNullOrEmpty()) {
-                        AsyncImage(
-                            model = photo,
-                            contentDescription = "Profile Photo",
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Text(
-                            text = userInitials,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                // Workspace & Email Names
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = userName,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (dark) Color.White else Color(0xFF0F172A)
-                    )
-                    Text(
-                        text = userEmail,
-                        fontSize = 12.sp,
-                        color = if (dark) Color.White.copy(alpha = 0.6f) else Color(0xFF64748B),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Channels Header
-            Text(
-                text = "WORKSPACE CHANNELS",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black,
-                color = if (dark) Color.White.copy(alpha = 0.4f) else Color(0xFF64748B),
-                letterSpacing = 1.2.sp,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
-
-            // Channels Navigation List
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // 1. Site Dashboard
-                DrawerNavItem(
-                    label = "Site Dashboard",
-                    icon = Icons.Default.Dashboard,
-                    active = currentTab == AppScreen.Dashboard,
-                    darkTheme = dark
-                ) {
-                    viewModel.currentScreen = AppScreen.Dashboard
-                    onClose()
-                }
-
-                // 2. Affiliates & Crew
-                DrawerNavItem(
-                    label = "Affiliates & Crew",
-                    icon = Icons.Default.People,
-                    active = currentTab == AppScreen.Site && activeSiteTab == "Party",
-                    darkTheme = dark
-                ) {
-                    viewModel.currentScreen = AppScreen.Site
-                    viewModel.activeSiteTab = "Party"
-                    onClose()
-                }
-
-                // 3. Chronicle Ledger
-                DrawerNavItem(
-                    label = "Chronicle Ledger",
-                    icon = Icons.Default.AccountBalanceWallet,
-                    active = currentTab == AppScreen.Money,
-                    darkTheme = dark
-                ) {
-                    viewModel.currentScreen = AppScreen.Money
-                    onClose()
-                }
-
-                // 4. Velocity Tasks
-                DrawerNavItem(
-                    label = "Velocity Tasks",
-                    icon = Icons.Default.TaskAlt,
-                    active = currentTab == AppScreen.Tasks,
-                    darkTheme = dark
-                ) {
-                    viewModel.currentScreen = AppScreen.Tasks
-                    onClose()
-                }
-
-                // 5. Staff Attendance
-                DrawerNavItem(
-                    label = "Staff Attendance",
-                    icon = Icons.Default.CheckCircle,
-                    active = currentTab == AppScreen.Site && activeSiteTab == "Attendance",
-                    darkTheme = dark
-                ) {
-                    viewModel.currentScreen = AppScreen.Site
-                    viewModel.activeSiteTab = "Attendance"
-                    onClose()
-                }
-
-                // 6. Site Control Hub
-                DrawerNavItem(
-                    label = "Site Control Hub",
-                    icon = Icons.Default.Settings,
-                    active = currentTab == AppScreen.More,
-                    darkTheme = dark
-                ) {
-                    viewModel.currentScreen = AppScreen.More
-                    onClose()
-                }
-            }
-        }
-
-        // Bottom Controls Section
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(bottom = 8.dp)
-        ) {
-            HorizontalDivider(color = if (dark) GlassBorderDark else Color(0x1F0284C7))
-
-            // Dark Mode Switch
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        imageVector = if (dark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                        contentDescription = "Theme status",
-                        tint = if (dark) NeonCyan else Color(0xFF0284C7),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        text = "Dark Mode",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        color = if (dark) Color.White else Color(0xFF0F172A)
-                    )
-                }
-                Switch(
-                    checked = dark,
-                    onCheckedChange = { viewModel.darkThemeEnabled = it },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = NeonCyan,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
-                    )
-                )
-            }
-
-            // Online Cloud Link Switch
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Cloud,
-                        contentDescription = "Cloud alignment",
-                        tint = if (dark) NeonCyan else Color(0xFF0284C7),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        text = "Online Cloud Link",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                        color = if (dark) Color.White else Color(0xFF0F172A)
-                    )
-                }
-                Switch(
-                    checked = viewModel.onlineCloudLinkEnabled,
-                    onCheckedChange = { viewModel.onlineCloudLinkEnabled = it },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color.White,
-                        checkedTrackColor = NeonCyan,
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
-                    )
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Footer Text
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "ConstructPro Secure Ledger Core v3.0",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (dark) Color.White.copy(alpha = 0.4f) else Color(0xFF64748B)
-                )
-                Text(
-                    text = "Authenticated - Affiliate Position Active",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Black,
-                    color = if (dark) Color(0xFF2DD4BF) else Color(0xFF0F766E),
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun DrawerNavItem(
-    label: String,
-    icon: ImageVector,
-    active: Boolean,
+fun NeoAiFloatingActionButton(
+    onClick: () -> Unit,
     darkTheme: Boolean,
-    onClick: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    val bg = if (active) {
-        if (darkTheme) Color(0x332DD4BF) else Color(0x1A0284C7)
-    } else Color.Transparent
+    val infiniteTransition = rememberInfiniteTransition(label = "neo_fab")
+    
+    // Constant pulsing scale breath
+    val scaleBreath by infiniteTransition.animateFloat(
+        initialValue = 0.96f, targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fab_breath"
+    )
 
-    val tc = if (active) {
-        if (darkTheme) Color(0xFF2DD4BF) else Color(0xFF0284C7)
-    } else {
-        if (darkTheme) Color.White.copy(alpha = 0.8f) else Color(0xFF334155)
-    }
+    // Rotating dial angle
+    val dialRotation by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "fab_rotation"
+    )
+    
+    // Pulsing glowing background radius
+    val auraAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.15f, targetValue = 0.45f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutQuad),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fab_aura"
+    )
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(bg)
-            .border(
-                1.dp,
-                if (active) (if (darkTheme) Color(0x4D2DD4BF) else Color(0x4D0284C7)) else Color.Transparent,
-                RoundedCornerShape(12.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val clickScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessHigh, dampingRatio = Spring.DampingRatioNoBouncy),
+        label = "fab_click_scale"
+    )
+
+    val coreColor = if (darkTheme) NeonPurple else Color(0xFF6366F1)
+    val accentColor = if (darkTheme) NeonCyan else Color(0xFF06B6D4)
+
+    Box(
+        modifier = modifier
+            .size(72.dp) // Generous 48dp+ tap size
+            .graphicsLayer {
+                scaleX = scaleBreath * clickScale
+                scaleY = scaleBreath * clickScale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tc,
-            modifier = Modifier.size(20.dp)
+        // 1. Radar Glowing Aura behind the FAB
+        Box(
+            modifier = Modifier
+                .size(68.dp)
+                .drawBehind {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(coreColor.copy(alpha = auraAlpha), Color.Transparent),
+                            radius = this.size.width * 0.48f
+                        )
+                    )
+                }
         )
-        Spacer(modifier = Modifier.width(14.dp))
-        Text(
-            text = label,
-            color = tc,
-            fontSize = 15.sp,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold
-        )
+
+        // 2. Rotating holographic mechanical border dial
+        Canvas(modifier = Modifier.size(60.dp)) {
+            rotate(dialRotation) {
+                // Draw twin neon crescent arcs orbiting each other
+                drawArc(
+                    color = accentColor.copy(alpha = 0.65f),
+                    startAngle = 0f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                )
+                drawArc(
+                    color = coreColor.copy(alpha = 0.65f),
+                    startAngle = 180f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+            // Fine blueprint guide circle
+            drawCircle(
+                color = coreColor.copy(alpha = 0.15f),
+                style = Stroke(width = 0.8f.dp.toPx())
+            )
+        }
+
+        // 3. Main Glass FAB Capsule
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            coreColor,
+                            coreColor.copy(alpha = 0.8f)
+                        )
+                    )
+                )
+                .border(1.2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                .drawBehind {
+                    // Premium gloss highlight
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(Color.White.copy(alpha = 0.4f), Color.Transparent),
+                            center = Offset(this.size.width * 0.35f, this.size.height * 0.35f),
+                            radius = this.size.width * 0.45f
+                        )
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "New Record action",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(26.dp)
+                    .graphicsLayer {
+                        // Micro rotating feedback inside icon when pressed
+                        rotationZ = if (isPressed) 45f else 0f
+                    }
+            )
+        }
     }
 }
+
