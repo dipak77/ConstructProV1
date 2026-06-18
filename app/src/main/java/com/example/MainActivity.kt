@@ -158,6 +158,7 @@ class MainActivity : ComponentActivity() {
                         }
                         is UiEvent.ShareFile -> {
                             try {
+                                viewModel.isFileOperationActive = true
                                 val uri = androidx.core.content.FileProvider.getUriForFile(
                                     applicationContext,
                                     "${packageName}.fileprovider",
@@ -195,7 +196,11 @@ class MainActivity : ComponentActivity() {
                     DisposableEffect(lifecycleOwner) {
                         val observer = LifecycleEventObserver { _, event ->
                             if (event == Lifecycle.Event.ON_STOP) {
-                                pinVerified = false
+                                if (!viewModel.isFileOperationActive) {
+                                    pinVerified = false
+                                }
+                            } else if (event == Lifecycle.Event.ON_RESUME) {
+                                viewModel.isFileOperationActive = false
                             }
                         }
                         lifecycleOwner.lifecycle.addObserver(observer)
@@ -415,8 +420,8 @@ fun ScaffoldFrame(viewModel: MainViewModel) {
             }
         }
 
-        // Premium Neo-AI Fluent Action Button - Dynamic contextual entry on Screens (except Commercial/Money and Dashboard)
-        if (currentTab != AppScreen.Money && currentTab != AppScreen.Dashboard) {
+        // Premium Neo-AI Fluent Action Button - Dynamic contextual entry on Screens (except Commercial/Money, Dashboard, and More)
+        if (currentTab != AppScreen.Money && currentTab != AppScreen.Dashboard && currentTab != AppScreen.More) {
             NeoAiFloatingActionButton(
                 onClick = {
                     when (currentTab) {
@@ -433,7 +438,7 @@ fun ScaffoldFrame(viewModel: MainViewModel) {
                                 else -> showWorkerDialog = true
                             }
                         }
-                        AppScreen.More -> showProjectDialog = true
+                        else -> {}
                     }
                 },
                 darkTheme = dark,

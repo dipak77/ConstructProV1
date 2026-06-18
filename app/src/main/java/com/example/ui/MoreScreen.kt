@@ -350,6 +350,7 @@ fun MoreScreen(
             // ── THEME & BACKUP CARD ───────────────────────────────────────────
             item {
                 PremiumThemeBackupCard(
+                    viewModel = viewModel,
                     dark = dark,
                     googleDriveSyncing = googleDriveSyncing,
                     driveSyncSuccess = driveSyncSuccess,
@@ -369,9 +370,15 @@ fun MoreScreen(
                         driveSyncSuccess = true
                     },
                     onExportProject = { viewModel.exportProjectBackup(context, currentProject!!) },
-                    onImportProject = { projectImportLauncher.launch("*/*") },
+                    onImportProject = {
+                        viewModel.isFileOperationActive = true
+                        projectImportLauncher.launch("*/*")
+                    },
                     onBackupSystem = { viewModel.exportFullBackup(context) },
-                    onRestoreSystem = { systemRestoreLauncher.launch("*/*") }
+                    onRestoreSystem = {
+                        viewModel.isFileOperationActive = true
+                        systemRestoreLauncher.launch("*/*")
+                    }
                 )
             }
 
@@ -683,7 +690,10 @@ fun MoreScreen(
                 onBgChange = { projBg = it },
                 onStartDateChange = { projStartDate = it },
                 onEndDateChange = { projEndDate = it },
-                onUploadImageClick = { projectImagePickerLauncher.launch("image/*") },
+                onUploadImageClick = {
+                    viewModel.isFileOperationActive = true
+                    projectImagePickerLauncher.launch("image/*")
+                },
                 onCancel = { showProjectModal = false; editingProject = null },
                 onSave = {
                     val bud = projBudget.toDoubleOrNull() ?: 0.0
@@ -1569,6 +1579,7 @@ private fun PremiumAccountCard(
 
 @Composable
 private fun PremiumThemeBackupCard(
+    viewModel: MainViewModel,
     dark: Boolean,
     googleDriveSyncing: Boolean,
     driveSyncSuccess: Boolean,
@@ -1766,6 +1777,7 @@ private fun PremiumThemeBackupCard(
                     Button(
                         onClick = {
                             try {
+                                viewModel.isFileOperationActive = true
                                 driveScopeLauncher.launch(googleSignInClient.signInIntent)
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()

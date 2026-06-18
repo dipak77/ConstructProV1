@@ -51,6 +51,8 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
     var operationProgress by mutableStateOf(OperationProgress())
         private set
 
+    var isFileOperationActive by mutableStateOf(false)
+
     // ==========================================
     // GOOGLE USER SESSION
     // ==========================================
@@ -1251,6 +1253,7 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
     // ==========================================
 
     fun exportTransactionsCSV(context: Context) {
+        isFileOperationActive = true
         viewModelScope.launch {
             try {
                 operationProgress = OperationProgress(isActive = true, progress = 0.3f, message = "Preparing CSV...")
@@ -1270,6 +1273,7 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
     }
 
     fun exportFullBackup(context: Context) {
+        isFileOperationActive = true
         viewModelScope.launch {
             try {
                 operationProgress = OperationProgress(isActive = true, progress = 0.2f, message = "Collecting data...")
@@ -1316,6 +1320,7 @@ class MainViewModel(private val repository: ConstructionRepository) : ViewModel(
 
     // Project-wise backup & background mutators
     fun exportProjectBackup(context: Context, project: Project) {
+        isFileOperationActive = true
         viewModelScope.launch {
             try {
                 operationProgress = OperationProgress(isActive = true, progress = 0.3f, message = "Exporting project...")
